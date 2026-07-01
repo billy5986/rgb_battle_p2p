@@ -1,0 +1,1405 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>光束競技場 3D (Light Arena)</title>
+    <style>
+        :root {
+            --bg-color: #050914;
+            --panel-bg: rgba(15, 23, 42, 0.4);
+            --primary-color: #38bdf8;
+            --text-color: #ffffff;
+            --border-color: rgba(255, 255, 255, 0.08);
+            --accent-red: #ef4444;
+            --accent-green: #10b981;
+            --accent-blue: #3b82f6;
+            --panel-shadow: 0 30px 60px -15px rgba(0, 0, 0, 0.8), inset 0 1px 0 rgba(255, 255, 255, 0.15);
+        }
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            user-select: none;
+            -webkit-user-select: none;
+            touch-action: none;
+            overscroll-behavior: none;
+        }
+        canvas {
+            display: block;
+            width: 100vw;
+            height: 100vh;
+        }
+        
+        /* 遊戲背景與 UI 疊加層 */
+        .ui-layer {
+            position: absolute;
+            top: 0; left: 0; width: 100vw; height: 100vh;
+            pointer-events: none;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            background:
+                radial-gradient(circle at center, rgba(15, 23, 42, 0.7) 0%, rgba(2, 6, 23, 0.95) 100%),
+                linear-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+            background-size: 100% 100%, 40px 40px, 40px 40px;
+            z-index: 10;
+            transition: opacity 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        
+        .panel {
+            background: var(--panel-bg);
+            padding: 45px;
+            border-radius: 32px;
+            border: 1px solid var(--border-color);
+            pointer-events: auto;
+            backdrop-filter: blur(24px);
+            -webkit-backdrop-filter: blur(24px);
+            box-shadow: var(--panel-shadow);
+            width: 440px;
+            max-width: 90%;
+            max-height: 90vh;
+            overflow-y: auto;
+            box-sizing: border-box;
+            position: relative;
+        }
+        
+        /* 自訂捲軸 */
+        .panel::-webkit-scrollbar { width: 8px; }
+        .panel::-webkit-scrollbar-track {
+            background: rgba(0, 0, 0, 0.25);
+            border-radius: 4px; margin: 4px 0;
+            box-shadow: inset 0 0 5px rgba(0, 0, 0, 0.5);
+        }
+        .panel::-webkit-scrollbar-thumb {
+            background: rgba(56, 189, 248, 0.4);
+            border-radius: 4px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            transition: background 0.3s;
+        }
+        .panel::-webkit-scrollbar-thumb:hover { background: rgba(56, 189, 248, 0.9); }
+
+        h1.game-title {
+            margin-top: 0;
+            font-size: 3.2rem;
+            letter-spacing: 4px;
+            font-weight: 900;
+            text-transform: uppercase;
+            background: linear-gradient(135deg, #ffffff 0%, #38bdf8 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 5px;
+            text-shadow: 0 0 30px rgba(56, 189, 248, 0.4);
+            text-align: center;
+        }
+        
+        .game-subtitle {
+            color: #94a3b8;
+            font-size: 0.95rem;
+            letter-spacing: 6px;
+            text-transform: uppercase;
+            font-weight: 700;
+            margin-bottom: 30px;
+            text-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
+            text-align: center;
+        }
+
+        h2, h3 { margin-top: 0; color: var(--primary-color); text-align: center; font-weight: 800; }
+        
+        /* 按鈕樣式 */
+        .btn {
+            width: 100%;
+            padding: 15px;
+            border: none;
+            border-radius: 14px;
+            font-size: 1.05rem;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+            color: white;
+            letter-spacing: 1px;
+            margin-bottom: 12px;
+            box-sizing: border-box;
+        }
+        .btn:hover:not(:disabled) { transform: translateY(-2px); }
+        .btn:active:not(:disabled) { transform: translateY(1px); }
+        .btn:disabled { background: #334155; color: #64748b; cursor: not-allowed; box-shadow: none; }
+        
+        .btn-primary {
+            background: linear-gradient(135deg, #0ea5e9 0%, #38bdf8 100%);
+            box-shadow: 0 6px 20px rgba(14, 165, 233, 0.3);
+        }
+        .btn-primary:hover:not(:disabled) { box-shadow: 0 8px 25px rgba(14, 165, 233, 0.5); }
+        
+        .btn-success {
+            background: linear-gradient(135deg, #10b981 0%, #34d399 100%);
+            box-shadow: 0 6px 20px rgba(16, 185, 129, 0.3);
+        }
+        .btn-success:hover:not(:disabled) { box-shadow: 0 8px 25px rgba(16, 185, 129, 0.5); }
+        
+        .btn-danger {
+            background: linear-gradient(135deg, #ef4444 0%, #f43f5e 100%);
+            box-shadow: 0 6px 20px rgba(239, 68, 68, 0.3);
+        }
+        .btn-danger:hover:not(:disabled) { box-shadow: 0 8px 25px rgba(239, 68, 68, 0.5); }
+
+        .btn-secondary {
+            background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+            box-shadow: 0 6px 20px rgba(99, 102, 241, 0.3);
+        }
+
+        /* 輸入框樣式 */
+        .input-group { margin-bottom: 20px; text-align: left; }
+        .control-label {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 8px;
+            font-size: 0.95rem;
+            color: #cbd5e1;
+            font-weight: 600;
+        }
+        input[type="text"], select {
+            width: 100%;
+            padding: 14px 18px;
+            margin-bottom: 16px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 14px;
+            font-size: 1.05rem;
+            text-align: center;
+            box-sizing: border-box;
+            outline: none;
+            background: rgba(0, 0, 0, 0.4);
+            color: white;
+            transition: all 0.3s;
+            font-weight: 600;
+            letter-spacing: 1px;
+        }
+        input[type="text"]:focus, select:focus {
+            border-color: #38bdf8;
+            box-shadow: 0 0 0 4px rgba(56, 189, 248, 0.15);
+            background: rgba(0, 0, 0, 0.6);
+        }
+        select option { background: #0f172a; }
+
+        input[type="range"] {
+            width: 100%;
+            margin: 10px 0 25px 0;
+            cursor: pointer;
+            accent-color: #38bdf8;
+            height: 6px;
+            border-radius: 3px;
+        }
+
+        /* 選單卡片 */
+        .menu-card {
+            background: rgba(255, 255, 255, 0.02);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            border-radius: 20px;
+            padding: 22px;
+            text-align: left;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            margin-bottom: 16px;
+        }
+        .menu-card:hover {
+            background: rgba(255, 255, 255, 0.05);
+            transform: translateY(-3px);
+            border-color: rgba(56, 189, 248, 0.4);
+            box-shadow: 0 15px 30px rgba(0, 0, 0, 0.4), 0 0 20px rgba(56, 189, 248, 0.15);
+        }
+        .menu-card h3 { margin: 0 0 8px 0; font-size: 1.15rem; color: #f8fafc; text-align: left;}
+        .menu-card p { margin: 0 0 16px 0; font-size: 0.9rem; color: #94a3b8; line-height: 1.5; }
+        
+        /* 遊戲 HUD */
+        #hud {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            pointer-events: none; display: none; z-index: 5;
+        }
+        #crosshair {
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            width: 8px; height: 8px; background: rgba(255, 255, 255, 0.9);
+            border-radius: 50%; box-shadow: 0 0 8px rgba(0, 0, 0, 0.8);
+        }
+        
+        #settings-btn {
+            position: absolute;
+            top: 25px; left: 25px;
+            background: transparent; border: none; cursor: pointer;
+            font-size: 2.2rem; text-align: center; z-index: 20;
+            transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            text-shadow: 0 4px 10px rgba(0, 0, 0, 0.5); pointer-events: auto;
+        }
+        #settings-btn:hover { transform: scale(1.15) rotate(90deg); }
+
+        .hud-top-right {
+            position: absolute; top: 20px; right: 20px; text-align: right;
+            background: rgba(15, 23, 42, 0.5); padding: 18px; border-radius: 16px;
+            border: 1px solid rgba(255, 255, 255, 0.08); backdrop-filter: blur(12px);
+            min-width: 220px; box-shadow: 0 10px 25px rgba(0, 0, 0, 0.4);
+            pointer-events: auto;
+        }
+        #timer-display { 
+            font-size: 26px; font-weight: bold; color: var(--primary-color); 
+            margin-bottom: 10px; font-family: monospace; text-align: center;
+        }
+        #leaderboard h3 {
+            margin: 0 0 12px 0; font-size: 1.05rem; text-align: center; color: var(--primary-color);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1); padding-bottom: 10px;
+            letter-spacing: 2px; text-transform: uppercase;
+        }
+        .leaderboard-entry { 
+            display: flex; justify-content: space-between; align-items: center;
+            margin-bottom: 10px; font-size: 0.95rem; font-weight: 600; padding: 4px 6px; border-radius: 8px;
+        }
+        
+        /* 教學提示字 */
+        #instruction {
+            position: absolute; top: 30px; width: 100%; text-align: center;
+            color: white; z-index: 5; text-shadow: 0 2px 5px rgba(0, 0, 0, 0.9);
+            font-weight: 600; font-size: 1.05rem; letter-spacing: 1px;
+        }
+
+        /* 狀態浮動通知 */
+        #toast-container {
+            position: fixed; top: 20px; left: 50%; transform: translateX(-50%);
+            z-index: 1000; display: flex; flex-direction: column; gap: 10px; pointer-events: none;
+        }
+        .toast {
+            background: rgba(220, 38, 38, 0.95); color: white; padding: 14px 28px;
+            border-radius: 12px; font-weight: 700; font-size: 1.05rem; letter-spacing: 1px;
+            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.4); backdrop-filter: blur(8px);
+            transition: all 0.3s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+            opacity: 0; transform: translateY(-20px) scale(0.9); text-align: center;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+        .toast.show { opacity: 1; transform: translateY(0) scale(1); }
+        .toast.success { background: rgba(16, 185, 129, 0.95); }
+
+        .settings-grid { display: grid; grid-template-columns: 1fr; gap: 5px; text-align: left; }
+        
+        /* 輔助類別 */
+        .hidden { display: none !important; }
+        
+        /* 載入動畫 */
+        .loader {
+            border: 4px solid rgba(255,255,255,0.1); width: 36px; height: 36px;
+            border-radius: 50%; border-left-color: var(--primary-color);
+            animation: spin 1s linear infinite; margin: 15px auto;
+        }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    </style>
+    <!-- 引入 Three.js 和 PeerJS -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+</head>
+<body>
+
+    <div id="toast-container"></div>
+
+    <!-- 主選單 -->
+    <div id="main-menu" class="ui-layer">
+        <div class="panel">
+            <h1 class="game-title">Light Arena</h1>
+            <div class="game-subtitle">3D Beam Survival</div>
+            
+            <div class="menu-card" style="margin-bottom: 25px; text-align: center; border-color: rgba(56,189,248,0.3);">
+                <p style="margin:0; color: #e2e8f0; font-weight: bold;">利用光束照射對手，同色治癒、異色消滅！</p>
+            </div>
+
+            <button class="btn btn-success" onclick="selectMode('single')">💻 單人離線模式</button>
+            <button class="btn btn-primary" onclick="selectMode('multi')">🌐 多人連線模式</button>
+        </div>
+    </div>
+
+    <!-- 多人模式選單 -->
+    <div id="multiplayer-menu" class="ui-layer hidden">
+        <div class="panel">
+            <h1 class="game-title" style="font-size: 2.2rem;">多人連線</h1>
+            <div class="game-subtitle">Multiplayer</div>
+            
+            <div class="menu-card" style="padding: 18px;">
+                <h3>建立戰場</h3>
+                <p>開啟專屬的連線房間，邀請朋友一起遊玩。</p>
+                <button class="btn btn-primary" onclick="initHost()" style="margin-bottom: 0;">創建房間</button>
+            </div>
+            
+            <div class="menu-card" style="padding: 18px;">
+                <h3>加入戰場</h3>
+                <p>輸入朋友提供的代碼，立刻加入戰局。</p>
+                <div style="display: flex; gap: 10px;">
+                    <input type="text" id="join-room-id" placeholder="貼上房號..." style="margin-bottom: 0; flex: 1;">
+                    <button class="btn btn-secondary" onclick="initClient()" style="width: auto; margin-bottom: 0; padding: 0 20px;">加入</button>
+                </div>
+            </div>
+
+            <button class="btn btn-danger" style="margin-top: 10px;" onclick="showScreen('main-menu')">返回主選單</button>
+        </div>
+    </div>
+
+    <!-- 遊戲設定與大廳 (單人與主機共用) -->
+    <div id="setup-screen" class="ui-layer hidden">
+        <div class="panel">
+            <h1 class="game-title" id="setup-title" style="font-size: 2.2rem;">遊戲設定</h1>
+            <div class="game-subtitle">Game Rules</div>
+            
+            <div id="room-info" class="menu-card hidden" style="border-color: rgba(56, 189, 248, 0.4); text-align: center;">
+                <div class="control-label" style="justify-content: center;">您的房間代碼 (點擊複製)</div>
+                <input type="text" id="display-room-id" readonly style="cursor: pointer; font-size: 1.5rem; font-weight: bold; color: var(--primary-color); letter-spacing: 2px; margin-bottom: 0;" onclick="copyRoomId(false)">
+            </div>
+
+            <div class="menu-card">
+                <div class="control-label">玩家暱稱</div>
+                <input type="text" id="player-name" value="神秘玩家" style="margin-bottom: 0;">
+            </div>
+
+            <div id="host-settings-area" class="settings-grid">
+            <div class="control-label"><span>時間限制 (分鐘)</span><span id="val-time">5</span></div>
+            <input type="range" id="set-time" min="1" max="60" value="5" oninput="updateVal('set-time','val-time')">
+
+            <div class="control-label"><span>地圖半徑</span><span id="val-map">400</span></div>
+            <input type="range" id="set-map" min="100" max="3000" step="100" value="400" oninput="updateVal('set-map','val-map')">
+
+            <div class="control-label" id="npc-count-setting"><span>NPC 數量 (僅單人)</span><span id="val-npc">5</span></div>
+            <input type="range" id="set-npc" min="0" max="20" value="5" oninput="updateVal('set-npc','val-npc')">
+
+            <div class="control-label"><span>人物比例 (倍)</span><span id="val-psize">1.0</span></div>
+            <input type="range" id="set-psize" min="0.5" max="5.0" step="0.1" value="1.0" oninput="updateVal('set-psize','val-psize')">
+
+            <div class="control-label">
+                <span>血條常駐顯示</span>
+                <input type="checkbox" id="set-hpbar" checked style="width: 20px; height: 20px; accent-color: var(--primary-color);">
+            </div>
+
+                <div class="control-label" style="margin-top: 10px;"><span>尖刺數量</span><span id="val-spike-c">15</span></div>
+                <input type="range" id="set-spike-c" min="0" max="200" value="15" oninput="updateVal('set-spike-c','val-spike-c')">
+
+                <div class="control-label"><span>尖刺扣血 (%)</span><span id="val-spike-d">20</span></div>
+                <input type="range" id="set-spike-d" min="0" max="100" value="20" oninput="updateVal('set-spike-d','val-spike-d')">
+
+                <div class="control-label"><span>加速帶數量</span><span id="val-pad-c">10</span></div>
+                <input type="range" id="set-pad-c" min="0" max="100" value="10" oninput="updateVal('set-pad-c','val-pad-c')">
+
+                <div class="control-label"><span>加速帶推力 (倍)</span><span id="val-pad-p">6</span></div>
+                <input type="range" id="set-pad-p" min="2" max="15" step="0.5" value="6" oninput="updateVal('set-pad-p','val-pad-p')">
+
+                <div class="control-label"><span>加速帶冷卻 (幀)</span><span id="val-pad-cd">90</span></div>
+                <input type="range" id="set-pad-cd" min="0" max="300" value="90" oninput="updateVal('set-pad-cd','val-pad-cd')">
+            </div>
+
+            <div class="menu-card" style="margin-top: 15px; background: rgba(0,0,0,0.4);">
+                <h3 style="font-size: 1rem; margin-bottom: 5px; color: #cbd5e1;">操作說明</h3>
+                <p style="font-size: 0.85rem; margin-bottom: 0;">
+                    移動：<kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> | 衝刺：按住 <kbd>Shift</kbd><br>
+                    變色：<kbd>Q</kbd> (紅/綠/藍) | 燈光切換：<kbd>E</kbd><br>
+                    開燈：按住 <kbd>左鍵</kbd> (廣角) 或 <kbd>右鍵</kbd> (集束)<br>
+                    規則：照同色補血，異色扣血！加速帶提供純爆發推力！
+                </p>
+            </div>
+
+            <div style="display: flex; gap: 10px; margin-top: 15px;">
+                <button class="btn btn-success" id="start-btn" onclick="startGame()" style="margin-bottom: 0;">開始遊戲</button>
+                <button class="btn btn-danger" onclick="cancelSetup()" style="margin-bottom: 0;">取消</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 客戶端等待大廳 -->
+    <div id="client-lobby" class="ui-layer hidden">
+        <div class="panel">
+            <h1 class="game-title" style="font-size: 2.2rem;">已加入房間</h1>
+            <div class="game-subtitle">Waiting for Host</div>
+            
+            <div class="menu-card">
+                <div class="control-label">您的名稱</div>
+                <input type="text" id="client-player-name" value="玩家B" style="margin-bottom: 0;">
+            </div>
+            
+            <div class="loader"></div>
+            <p style="color: #cbd5e0; text-align: center; margin-bottom: 20px;">正在等待主機設定遊戲規則並啟動...</p>
+            
+            <button class="btn btn-danger" onclick="leaveRoom()">離開房間</button>
+        </div>
+    </div>
+
+    <!-- 遊戲中暫停/設定選單 -->
+    <div id="pause-menu" class="ui-layer hidden" style="background: rgba(2, 6, 23, 0.7); backdrop-filter: blur(10px);">
+        <div class="panel">
+            <h1 class="game-title" style="font-size: 2.2rem;">遊戲選單</h1>
+            <div class="game-subtitle">Settings</div>
+            
+            <div id="pause-room-info" class="menu-card hidden" style="border-color: rgba(56, 189, 248, 0.3);">
+                <div class="control-label" style="justify-content: center; margin-bottom: 5px;">連線代碼 (點擊複製)</div>
+                <div style="display: flex; gap: 10px; justify-content: center; align-items: center;">
+                    <span id="pause-display-room-id" style="font-size: 1.5rem; font-weight: 800; color: #38bdf8; letter-spacing: 2px; cursor: pointer;" onclick="copyRoomId(true)"></span>
+                </div>
+            </div>
+            
+            <div class="menu-card">
+                <div class="control-label">滑鼠靈敏度: <span id="val-sens">1.0</span></div>
+                <input type="range" id="set-sens" min="0.1" max="3.0" step="0.1" value="1.0" oninput="updateVal('set-sens','val-sens'); sensitivity = parseFloat(this.value);">
+            </div>
+            
+            <button class="btn btn-primary" onclick="resumeGame()">繼續遊戲</button>
+            <button class="btn btn-danger" onclick="window.location.reload()">退出至主選單</button>
+        </div>
+    </div>
+
+    <!-- HUD 抬頭顯示 -->
+    <div id="hud">
+        <div id="crosshair"></div>
+        <div id="instruction" class="hidden">點擊畫面鎖定視角 | WASD 移動 | Q 換色 | 左右鍵 射光</div>
+        <div id="settings-btn" title="設定 (ESC)">⚙️</div>
+        
+        <div class="hud-top-right">
+            <div id="timer-display">05:00</div>
+            <div id="leaderboard">
+                <h3>🏆 擊殺排行榜</h3>
+                <div id="leaderboard-list">載入中...</div>
+            </div>
+        </div>
+    </div>
+
+<script>
+/* ==========================================
+   系統與 UI 全域變數
+========================================== */
+let peer = null;
+let conn = null; 
+let connections = {}; 
+let isHost = false;
+let isMultiplayer = false;
+let myPeerId = null;
+let gameState = 'MENU'; 
+let sensitivity = 1.0;
+let timeRemaining = 300; 
+let timerInterval = null;
+
+// 遊戲設定 (改回預設人物比例 1.0)
+let GAME_SETTINGS = {
+    timeLimit: 5,
+    mapSize: 400,
+    npcCount: 5,
+    playerSize: 1.0,
+    hpBarPersistent: true,
+    spikeCount: 15,
+    spikeDamage: 20,
+    padCount: 10,
+    padPush: 6,
+    padCooldown: 90
+};
+
+const COLORS = [
+    { name: '紅', hex: 0xef4444, rgb: [0.93, 0.26, 0.26] },
+    { name: '綠', hex: 0x10b981, rgb: [0.06, 0.72, 0.5] },
+    { name: '藍', hex: 0x3b82f6, rgb: [0.23, 0.5, 0.96] }
+];
+
+function showScreen(id) {
+    document.querySelectorAll('.ui-layer').forEach(el => el.classList.add('hidden'));
+    if(id) document.getElementById(id).classList.remove('hidden');
+}
+
+function updateVal(inputId, displayId) {
+    document.getElementById(displayId).innerText = document.getElementById(inputId).value;
+}
+
+function showToast(message, isSuccess = false) {
+    const container = document.getElementById('toast-container');
+    const toast = document.createElement('div');
+    toast.className = 'toast';
+    if (isSuccess) toast.classList.add('success');
+    toast.innerText = message;
+    container.appendChild(toast);
+    requestAnimationFrame(() => toast.classList.add('show'));
+    setTimeout(() => {
+        toast.classList.remove('show');
+        setTimeout(() => toast.remove(), 300);
+    }, 3000);
+}
+
+function copyRoomId(fromPause = false) {
+    const el = document.getElementById(fromPause ? 'pause-display-room-id' : 'display-room-id');
+    const textToCopy = fromPause ? el.innerText : el.value;
+    const tempInput = document.createElement('input');
+    tempInput.value = textToCopy;
+    document.body.appendChild(tempInput);
+    tempInput.select();
+    document.execCommand('copy');
+    document.body.removeChild(tempInput);
+    showToast('已複製房間代碼！', true);
+}
+
+/* ==========================================
+   音效系統 (Web Audio API 虛擬合成器)
+========================================== */
+let audioCtx = null;
+function initAudio() {
+    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+}
+
+function playSound(type) {
+    if (!audioCtx) return;
+    initAudio();
+    const now = audioCtx.currentTime;
+
+    if (type === 'heal') {
+        const osc = audioCtx.createOscillator(); const gain = audioCtx.createGain();
+        osc.type = 'sine'; osc.frequency.setValueAtTime(300, now); osc.frequency.exponentialRampToValueAtTime(1200, now + 0.3);
+        gain.gain.setValueAtTime(0.15, now); gain.gain.exponentialRampToValueAtTime(0.01, now + 0.3);
+        osc.connect(gain); gain.connect(audioCtx.destination); osc.start(now); osc.stop(now + 0.3);
+    } else if (type === 'damage') {
+        const bufferSize = audioCtx.sampleRate * 0.15; const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+        const data = buffer.getChannelData(0); for (let i = 0; i < bufferSize; i++) data[i] = Math.random() * 2 - 1;
+        const noise = audioCtx.createBufferSource(); noise.buffer = buffer;
+        const filter = audioCtx.createBiquadFilter(); filter.type = 'bandpass'; filter.frequency.value = 2500;
+        const gain = audioCtx.createGain(); gain.gain.setValueAtTime(0.2, now); gain.gain.exponentialRampToValueAtTime(0.01, now + 0.15);
+        noise.connect(filter); filter.connect(gain); gain.connect(audioCtx.destination); noise.start(now);
+    } else if (type === 'boost') {
+        const osc = audioCtx.createOscillator(); const gain = audioCtx.createGain();
+        osc.type = 'sawtooth'; osc.frequency.setValueAtTime(100, now); osc.frequency.exponentialRampToValueAtTime(800, now + 0.4);
+        gain.gain.setValueAtTime(0.2, now); gain.gain.exponentialRampToValueAtTime(0.01, now + 0.4);
+        osc.connect(gain); gain.connect(audioCtx.destination); osc.start(now); osc.stop(now + 0.4);
+    } else if (type === 'spike') {
+        const osc = audioCtx.createOscillator(); const gain = audioCtx.createGain();
+        osc.type = 'triangle'; osc.frequency.setValueAtTime(180, now); osc.frequency.linearRampToValueAtTime(60, now + 0.3);
+        gain.gain.setValueAtTime(0.4, now); gain.gain.exponentialRampToValueAtTime(0.01, now + 0.3);
+        osc.connect(gain); gain.connect(audioCtx.destination); osc.start(now); osc.stop(now + 0.3);
+    } else if (type === 'kill') {
+        const osc1 = audioCtx.createOscillator(); const osc2 = audioCtx.createOscillator(); const gain = audioCtx.createGain();
+        osc1.type = 'sine'; osc2.type = 'square';
+        osc1.frequency.setValueAtTime(523.25, now); osc1.frequency.setValueAtTime(659.25, now + 0.1); 
+        osc1.frequency.setValueAtTime(783.99, now + 0.2); osc1.frequency.setValueAtTime(1046.50, now + 0.3); 
+        osc2.frequency.setValueAtTime(261.63, now); osc2.frequency.setValueAtTime(329.63, now + 0.1);
+        osc2.frequency.setValueAtTime(392.00, now + 0.2); osc2.frequency.setValueAtTime(523.25, now + 0.3);
+        gain.gain.setValueAtTime(0.15, now); gain.gain.exponentialRampToValueAtTime(0.01, now + 0.5);
+        osc1.connect(gain); osc2.connect(gain); gain.connect(audioCtx.destination);
+        osc1.start(now); osc2.start(now); osc1.stop(now + 0.5); osc2.stop(now + 0.5);
+    }
+}
+
+/* ==========================================
+   PeerJS 網路通訊架構
+========================================== */
+function selectMode(mode) {
+    initAudio();
+    if (mode === 'single') {
+        isMultiplayer = false; isHost = true;
+        document.getElementById('setup-title').innerText = '單人模式設定';
+        document.getElementById('room-info').classList.add('hidden');
+        document.getElementById('host-settings-area').classList.remove('hidden');
+        document.getElementById('npc-count-setting').style.display = 'flex';
+        document.getElementById('set-npc').style.display = 'block';
+        showScreen('setup-screen');
+    } else {
+        isMultiplayer = true;
+        document.getElementById('npc-count-setting').style.display = 'none';
+        document.getElementById('set-npc').style.display = 'none';
+        showScreen('multiplayer-menu');
+    }
+}
+
+function cancelSetup() {
+    if (peer) { peer.destroy(); peer = null; }
+    showScreen('main-menu');
+}
+
+function generateRandomRoomId() {
+    return Math.floor(100000 + Math.random() * 900000).toString();
+}
+
+function initHost() {
+    showToast('正在向伺服器申請房號...');
+    const targetRoomId = generateRandomRoomId();
+    peer = new Peer(targetRoomId);
+
+    peer.on('open', (id) => {
+        myPeerId = id; isHost = true;
+        document.getElementById('setup-title').innerText = '多人大廳 (主機)';
+        document.getElementById('display-room-id').value = id;
+        document.getElementById('pause-display-room-id').innerText = id;
+        document.getElementById('room-info').classList.remove('hidden');
+        document.getElementById('pause-room-info').classList.remove('hidden');
+        document.getElementById('host-settings-area').classList.remove('hidden');
+        showScreen('setup-screen');
+        showToast('房間創建成功！', true);
+    });
+
+    peer.on('error', (err) => {
+        if (err.type === 'unavailable-id') initHost();
+        else showToast('連線錯誤: ' + err.type);
+    });
+
+    peer.on('connection', (c) => {
+        c.on('open', () => {
+            connections[c.peer] = c;
+            showToast(`新玩家連線中...`);
+            c.send({ type: 'lobby_sync', settings: getFormSettings() });
+        });
+        c.on('data', (data) => handleNetworkData(c.peer, data));
+        c.on('close', () => handlePlayerDisconnect(c.peer));
+    });
+}
+
+function initClient() {
+    const targetId = document.getElementById('join-room-id').value.trim();
+    if (!targetId) return showToast('請輸入房號！');
+    showToast('連線至房間: ' + targetId);
+    peer = new Peer();
+
+    peer.on('open', (id) => {
+        myPeerId = id; isHost = false;
+        conn = peer.connect(targetId);
+
+        conn.on('open', () => {
+            showToast('成功連接至主機！', true);
+            document.getElementById('pause-display-room-id').innerText = targetId;
+            document.getElementById('pause-room-info').classList.remove('hidden');
+            showScreen('client-lobby');
+        });
+        conn.on('data', (data) => handleNetworkData(targetId, data));
+        conn.on('close', () => { showToast('與主機連線中斷'); leaveRoom(); });
+    });
+    peer.on('error', (err) => showToast('無法連接至該房間，請確認代碼'));
+}
+
+function leaveRoom() {
+    if (peer) { peer.destroy(); peer = null; }
+    conn = null; connections = {};
+    showScreen('main-menu');
+}
+
+function getFormSettings() {
+    return {
+        timeLimit: parseInt(document.getElementById('set-time').value),
+        mapSize: parseInt(document.getElementById('set-map').value),
+        npcCount: parseInt(document.getElementById('set-npc').value),
+        playerSize: parseFloat(document.getElementById('set-psize').value),
+        hpBarPersistent: document.getElementById('set-hpbar').checked,
+        spikeCount: parseInt(document.getElementById('set-spike-c').value),
+        spikeDamage: parseInt(document.getElementById('set-spike-d').value),
+        padCount: parseInt(document.getElementById('set-pad-c').value),
+        padPush: parseFloat(document.getElementById('set-pad-p').value),
+        padCooldown: parseInt(document.getElementById('set-pad-cd').value)
+    };
+}
+
+function handleNetworkData(senderPeerId, data) {
+    if (data.type === 'lobby_sync') {
+        GAME_SETTINGS = data.settings; syncUISettings(GAME_SETTINGS);
+    } 
+    else if (data.type === 'game_start') {
+        GAME_SETTINGS = data.settings; remoteObstaclesSeed = data.obstaclesSeed;
+        localPlayerName = document.getElementById('client-player-name').value.trim() || '玩家B';
+        conn.send({ type: 'register_name', name: localPlayerName });
+        buildWorldAndStart();
+    }
+    else if (data.type === 'register_name') {
+        if (!players[senderPeerId]) spawnRemotePlayer(senderPeerId, data.name);
+        else players[senderPeerId].name = data.name;
+        broadcast({ type: 'sync_names', list: getAllPlayerNames() });
+    }
+    else if (data.type === 'sync_names') {
+        data.list.forEach(item => {
+            if (item.id !== myPeerId) {
+                if (!players[item.id]) spawnRemotePlayer(item.id, item.name);
+                else players[item.id].name = item.name;
+            }
+        });
+    }
+    else if (data.type === 'sync_players') {
+        data.players.forEach(pData => {
+            if (pData.id !== myPeerId) {
+                let p = players[pData.id];
+                if (!p) p = spawnRemotePlayer(pData.id, pData.name);
+                p.mesh.position.set(pData.x, pData.y, pData.z);
+                p.mesh.rotation.y = pData.ry;
+                p.bodyColorIndex = pData.bodyColor;
+                p.lightColorIndex = pData.lightColor;
+                p.isLightOn = pData.isLightOn;
+                p.isLightFocus = pData.isLightFocus;
+                p.hp = pData.hp; p.kills = pData.kills; p.deaths = pData.deaths;
+                p.capsuleMesh.material.color.setHex(COLORS[pData.bodyColor].hex);
+                updateRemoteLightCone(p);
+            }
+        });
+    }
+    else if (data.type === 'trigger_damage' && data.targetId === myPeerId) { damageLocalPlayer(data.amount, data.attackerId); }
+    else if (data.type === 'trigger_heal' && data.targetId === myPeerId) { healLocalPlayer(data.amount); }
+    else if (data.type === 'player_killed') { showToast(`💥 ${data.killerName} 消滅了 ${data.victimName}！`); playSound('kill'); }
+}
+
+function handlePlayerDisconnect(peerId) {
+    if (players[peerId]) { scene.remove(players[peerId].mesh); delete players[peerId]; showToast('一名玩家離開了'); }
+}
+
+function syncUISettings(s) {
+    ['time','map','npc','psize','spike-c','spike-d','pad-c','pad-p','pad-cd'].forEach(k => {
+        let val;
+        if (k === 'psize') val = s.playerSize.toFixed(1);
+        else if (k === 'npc') val = s.npcCount !== undefined ? s.npcCount : 5;
+        else val = s[k.replace('-','').replace('p','padPush').replace('c','Count').replace('d','Damage').replace('time','timeLimit').replace('map','mapSize')];
+        
+        if(document.getElementById(`val-${k}`)) document.getElementById(`val-${k}`).innerText = val;
+        if(document.getElementById(`set-${k}`)) document.getElementById(`set-${k}`).value = val;
+    });
+    document.getElementById('set-hpbar').checked = s.hpBarPersistent;
+}
+
+function broadcast(data) {
+    if (!isMultiplayer) return;
+    if (isHost) { for (let key in connections) if (connections[key] && connections[key].open) connections[key].send(data); } 
+    else if (conn && conn.open) conn.send(data);
+}
+
+function getAllPlayerNames() {
+    let list = [{ id: myPeerId, name: localPlayerName }];
+    for (let key in players) if (key !== myPeerId) list.push({ id: key, name: players[key].name });
+    return list;
+}
+
+/* ==========================================
+   3D 遊戲引擎核心 (Three.js) + Sphere War 風格
+========================================== */
+let scene, camera, renderer;
+let clock;
+let localPlayer = {
+    mesh: null, capsuleMesh: null,
+    hp: 100, kills: 0, deaths: 0, bodyColorIndex: 0, lightColorIndex: 1,
+    isLightOn: false, isLightFocus: false, velocity: new THREE.Vector3(),
+    onGround: false, radius: 0.8, height: 2.2, yRotation: 0
+};
+let localPlayerName = "我";
+let players = {}; let spikes = []; let pads = []; let particles = [];
+let remoteObstaclesSeed = null; let lightConeMesh = null;
+let keys = {}; let mouse = { x: 0, y: 0, left: false, right: false };
+let cameraPitch = 0; let isPaused = false;
+
+// 材質設定 (Sphere War 風格)
+const groundMat = new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.9 });
+const gridColorMain = 0x334155, gridColorSub = 0x1e293b;
+const spikeMat = new THREE.MeshStandardMaterial({ color: 0xe11d48, roughness: 0.4, metalness: 0.5 });
+const padMat = new THREE.MeshBasicMaterial({ color: 0x06b6d4 }); // 改為純色無光影材質
+
+function createCapsule(radius, height, colorHex) {
+    const group = new THREE.Group();
+    const cylHeight = height - radius * 2;
+    const cylGeo = new THREE.CylinderGeometry(radius, radius, cylHeight, 16);
+    const mat = new THREE.MeshStandardMaterial({ color: colorHex, roughness: 0.3, metalness: 0.4, emissive: colorHex, emissiveIntensity: 0.2 });
+    const cyl = new THREE.Mesh(cylGeo, mat); cyl.position.y = height / 2; cyl.castShadow = true; cyl.receiveShadow = true; group.add(cyl);
+    const sphereTop = new THREE.Mesh(new THREE.SphereGeometry(radius, 16, 16, 0, Math.PI*2, 0, Math.PI/2), mat); sphereTop.position.y = height - radius; sphereTop.castShadow = true; group.add(sphereTop);
+    const sphereBot = new THREE.Mesh(new THREE.SphereGeometry(radius, 16, 16, 0, Math.PI*2, Math.PI/2, Math.PI/2), mat); sphereBot.position.y = radius; sphereBot.castShadow = true; group.add(sphereBot);
+    return { group, visualMesh: cyl };
+}
+
+function startGame() {
+    if (isMultiplayer && !isHost) return;
+    GAME_SETTINGS = getFormSettings();
+    localPlayerName = document.getElementById('player-name').value.trim() || '主機玩家';
+    if (isMultiplayer && isHost) {
+        remoteObstaclesSeed = Math.random();
+        broadcast({ type: 'game_start', settings: GAME_SETTINGS, obstaclesSeed: remoteObstaclesSeed });
+    }
+    buildWorldAndStart();
+}
+
+function buildWorldAndStart() {
+    showScreen(null); document.getElementById('hud').style.display = 'block';
+    document.getElementById('instruction').classList.remove('hidden');
+
+    scene = new THREE.Scene(); scene.background = new THREE.Color(0x050914);
+    scene.fog = new THREE.Fog(0x050914, 200, Math.max(1500, GAME_SETTINGS.mapSize * 1.5));
+
+    camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.1, 5000);
+    renderer = new THREE.WebGLRenderer({ antialias: true }); renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    
+    const existingCanvas = document.querySelector('canvas'); if (existingCanvas) existingCanvas.remove();
+    document.body.appendChild(renderer.domElement);
+    clock = new THREE.Clock();
+
+    const ambient = new THREE.AmbientLight(0x444444, 1.2); scene.add(ambient);
+    const hemiLight = new THREE.HemisphereLight(0xffffff, 0x444444, 0.6); hemiLight.position.set(0, 200, 0); scene.add(hemiLight);
+    const sun = new THREE.DirectionalLight(0xffffff, 1.0);
+    sun.position.set(200, 500, 100); sun.castShadow = true;
+    sun.shadow.mapSize.width = 2048; sun.shadow.mapSize.height = 2048;
+    const d = GAME_SETTINGS.mapSize;
+    sun.shadow.camera.left = -d; sun.shadow.camera.right = d; sun.shadow.camera.top = d; sun.shadow.camera.bottom = -d;
+    scene.add(sun);
+
+    // 建立大範圍地板 (正方形)
+    const mapS = GAME_SETTINGS.mapSize;
+    const floor = new THREE.Mesh(new THREE.PlaneGeometry(mapS * 2, mapS * 2), groundMat);
+    floor.rotation.x = -Math.PI / 2; floor.receiveShadow = true; scene.add(floor);
+    
+    // 格線
+    const divisions = Math.max(10, Math.floor(mapS / 30));
+    const gridHelper = new THREE.GridHelper(mapS * 2, divisions, gridColorMain, gridColorSub);
+    gridHelper.position.y = 0.1; scene.add(gridHelper);
+
+    // 邊界光環
+    const ringGeo = new THREE.RingGeometry(mapS - 10, mapS, 64);
+    const ringMat = new THREE.MeshBasicMaterial({ color: 0x38bdf8, side: THREE.DoubleSide, transparent: true, opacity: 0.5 });
+    const ring = new THREE.Mesh(ringGeo, ringMat); ring.rotation.x = Math.PI / 2; ring.position.y = 0.15; scene.add(ring);
+
+    // 【修改點】將人物基礎大小變大 (半徑5，高度14)，高於尖刺 (高度10)
+    localPlayer.radius = 5.0 * GAME_SETTINGS.playerSize; 
+    localPlayer.height = 14.0 * GAME_SETTINGS.playerSize;
+    localPlayer.hp = 100; localPlayer.kills = 0; localPlayer.deaths = 0; localPlayer.velocity.set(0,0,0);
+    const capObj = createCapsule(localPlayer.radius, localPlayer.height, COLORS[localPlayer.bodyColorIndex].hex);
+    localPlayer.mesh = capObj.group; localPlayer.capsuleMesh = capObj.visualMesh;
+    localPlayer.mesh.position.copy(getRandomSpawnPosition()); scene.add(localPlayer.mesh);
+
+    lightConeMesh = createLightConeVisual(); localPlayer.mesh.add(lightConeMesh);
+    players[myPeerId || 'local'] = localPlayer;
+    
+    // 單人模式生成 NPC
+    if (!isMultiplayer) {
+        const npcNames = ['Alpha', 'Beta', 'Gamma', 'Delta', 'Sigma', 'Omega', 'Zeta', 'Kappa'];
+        for (let i = 0; i < GAME_SETTINGS.npcCount; i++) {
+            const botId = 'bot_' + i;
+            const bName = 'Bot_' + npcNames[i % npcNames.length];
+            const p = spawnRemotePlayer(botId, bName);
+            p.mesh.position.copy(getRandomSpawnPosition());
+            p.bodyColorIndex = Math.floor(Math.random() * 3);
+            p.lightColorIndex = Math.floor(Math.random() * 3);
+            p.capsuleMesh.material.color.setHex(COLORS[p.bodyColorIndex].hex);
+            
+            // 初始化 AI 行為參數
+            p.ai = {
+                targetPos: getRandomSpawnPosition(),
+                changeTargetTime: 0,
+                actionTimer: 0,
+                moveSpeed: 25.0 + Math.random() * 10.0
+            };
+        }
+    }
+
+    generateMapAssets(); setupInputListeners();
+
+    timeRemaining = GAME_SETTINGS.timeLimit * 60;
+    if (timerInterval) clearInterval(timerInterval);
+    timerInterval = setInterval(() => {
+        if (!isPaused) {
+            timeRemaining--; if (timeRemaining <= 0) { timeRemaining = 0; endGame(); }
+            document.getElementById('timer-display').innerText = `${Math.floor(timeRemaining/60).toString().padStart(2,'0')}:${(timeRemaining%60).toString().padStart(2,'0')}`;
+        }
+    }, 1000);
+
+    gameState = 'PLAYING'; isPaused = false;
+    document.exitPointerLock(); document.body.requestPointerLock();
+    animate();
+}
+
+function getRandomSpawnPosition() {
+    const r = Math.random() * (GAME_SETTINGS.mapSize * 0.8); const angle = Math.random() * Math.PI * 2;
+    return new THREE.Vector3(Math.cos(angle) * r, 5, Math.sin(angle) * r);
+}
+
+function generateMapAssets() {
+    spikes.forEach(s => scene.remove(s.mesh)); pads.forEach(p => scene.remove(p.mesh));
+    spikes = []; pads = [];
+    const randomFunc = () => { if (remoteObstaclesSeed !== null) { let x = Math.sin(remoteObstaclesSeed++) * 10000; return x - Math.floor(x); } return Math.random(); };
+    const mapR = GAME_SETTINGS.mapSize;
+
+    // 【修改點】將尖刺微縮小，使其比玩家的基礎大小稍小 (高度10，半徑3)
+    const sGeo = new THREE.ConeGeometry(3, 10, 8);
+    for (let i = 0; i < GAME_SETTINGS.spikeCount; i++) {
+        const mesh = new THREE.Mesh(sGeo, spikeMat);
+        mesh.position.set((randomFunc()-0.5) * mapR * 1.6, 5, (randomFunc()-0.5) * mapR * 1.6); // 高度一半
+        mesh.castShadow = true; mesh.receiveShadow = true; scene.add(mesh);
+        spikes.push({ mesh: mesh, pos: mesh.position, radius: 3, height: 10 });
+    }
+
+    // 圓形平面加速帶 (加大半徑)
+    const pGeo = new THREE.CylinderGeometry(12, 12, 0.5, 16);
+    for (let i = 0; i < GAME_SETTINGS.padCount; i++) {
+        const mesh = new THREE.Mesh(pGeo, padMat);
+        mesh.position.set((randomFunc()-0.5) * mapR * 1.6, 0.25, (randomFunc()-0.5) * mapR * 1.6);
+        // 【修改點】移除不必要的箭頭指標，因為現在是依據玩家當前方向加速
+        scene.add(mesh);
+        pads.push({ mesh: mesh, pos: mesh.position, radius: 12, cooldowns: {} });
+    }
+}
+
+function createLightConeVisual() {
+    const coneGeo = new THREE.ConeGeometry(1, 1, 16, 1, true); coneGeo.rotateX(Math.PI / 2); coneGeo.translate(0, 0, 0.5);
+    const mesh = new THREE.Mesh(coneGeo, new THREE.MeshBasicMaterial({
+        color: COLORS[localPlayer.lightColorIndex].hex, transparent: true, opacity: 0.0,
+        depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide
+    }));
+    mesh.position.set(0, localPlayer.height * 0.75, 0); return mesh;
+}
+
+function spawnRemotePlayer(id, name) {
+    if (players[id]) return players[id];
+    // 【修改點】基礎大小同步更改
+    const rSize = 5.0 * GAME_SETTINGS.playerSize; const hSize = 14.0 * GAME_SETTINGS.playerSize;
+    const capObj = createCapsule(rSize, hSize, COLORS[0].hex); const pMesh = capObj.group; scene.add(pMesh);
+    const remoteLightCone = createLightConeVisual(); pMesh.add(remoteLightCone);
+    
+    players[id] = { 
+        mesh: pMesh, capsuleMesh: capObj.visualMesh, name: name, hp: 100, kills: 0, deaths: 0, 
+        bodyColorIndex: 0, lightColorIndex: 1, isLightOn: false, isLightFocus: false, 
+        lightCone: remoteLightCone, radius: rSize, height: hSize,
+        velocity: new THREE.Vector3(), onGround: false, yRotation: 0 
+    };
+    return players[id];
+}
+
+function updateRemoteLightCone(p) {
+    if (!p.lightCone) return;
+    if (!p.isLightOn) { p.lightCone.material.opacity = 0; return; }
+    p.lightCone.material.color.setHex(COLORS[p.lightColorIndex].hex);
+    // 配合大人物調整光束視覺尺度
+    if (p.isLightFocus) { p.lightCone.scale.set(3, 3, 180); p.lightCone.material.opacity = 0.55; } 
+    else { p.lightCone.scale.set(20, 20, 70); p.lightCone.material.opacity = 0.25; }
+}
+
+/* ==========================================
+   控制與輸入事件
+========================================== */
+function setupInputListeners() {
+    keys = {};
+    window.addEventListener('keydown', (e) => {
+        keys[e.key.toLowerCase()] = true;
+        if (gameState !== 'PLAYING') return;
+        if (e.key === 'q' || e.key === 'Q') {
+            localPlayer.bodyColorIndex = (localPlayer.bodyColorIndex + 1) % 3;
+            localPlayer.capsuleMesh.material.color.setHex(COLORS[localPlayer.bodyColorIndex].hex); playSound('heal');
+        }
+        if (e.key === 'e' || e.key === 'E') {
+            localPlayer.lightColorIndex = (localPlayer.lightColorIndex + 1) % 3;
+            lightConeMesh.material.color.setHex(COLORS[localPlayer.lightColorIndex].hex); playSound('heal');
+        }
+    });
+    window.addEventListener('keyup', (e) => keys[e.key.toLowerCase()] = false);
+
+    document.getElementById('settings-btn').addEventListener('click', () => {
+        if(gameState === 'PLAYING') {
+            isPaused = !isPaused;
+            if(isPaused) { document.exitPointerLock(); showScreen('pause-menu'); }
+            else { document.body.requestPointerLock(); showScreen(null); }
+        }
+    });
+    
+    // 綁定 ESC
+    document.addEventListener('pointerlockchange', () => {
+        if (gameState === 'PLAYING' && document.pointerLockElement !== document.body) {
+            isPaused = true; showScreen('pause-menu');
+        }
+    });
+
+    window.addEventListener('mousemove', (e) => {
+        if (gameState !== 'PLAYING' || isPaused) return;
+        if (document.pointerLockElement === document.body) {
+            const lookSens = 0.002 * sensitivity;
+            localPlayer.yRotation -= e.movementX * lookSens;
+            cameraPitch += e.movementY * lookSens;
+            cameraPitch = Math.max(-Math.PI / 2.5, Math.min(Math.PI / 2.5, cameraPitch));
+        }
+    });
+
+    window.addEventListener('mousedown', (e) => {
+        initAudio();
+        if (gameState !== 'PLAYING' || isPaused) return;
+        if (document.pointerLockElement !== document.body) { document.body.requestPointerLock(); return; }
+        if (e.button === 0) mouse.left = true; if (e.button === 2) mouse.right = true;
+    });
+    window.addEventListener('mouseup', (e) => { if (e.button === 0) mouse.left = false; if (e.button === 2) mouse.right = false; });
+    window.addEventListener('contextmenu', e => e.preventDefault());
+}
+
+function resumeGame() { isPaused = false; document.body.requestPointerLock(); showScreen(null); }
+
+/* ==========================================
+   粒子特效系統
+========================================== */
+function spawnHealParticles(pos) {
+    for (let i = 0; i < 5; i++) {
+        const mesh = new THREE.Mesh(new THREE.BoxGeometry(1.5,1.5,1.5), new THREE.MeshBasicMaterial({ color: 0x10b981 }));
+        mesh.position.copy(pos).add(new THREE.Vector3((Math.random()-0.5)*4, Math.random()*4, (Math.random()-0.5)*4));
+        scene.add(mesh);
+        particles.push({ mesh: mesh, vel: new THREE.Vector3((Math.random()-0.5)*1.5, 2.5+Math.random(), (Math.random()-0.5)*1.5), life: 1.0, decay: 1.5+Math.random(), type: 'heal' });
+    }
+}
+function spawnDamageParticles(pos) {
+    for (let i = 0; i < 6; i++) {
+        const mesh = new THREE.Mesh(new THREE.DodecahedronGeometry(1.5), new THREE.MeshBasicMaterial({ color: 0xef4444, transparent: true, opacity: 0.8 }));
+        mesh.position.copy(pos).add(new THREE.Vector3((Math.random()-0.5)*3.5, Math.random()*4, (Math.random()-0.5)*3.5));
+        scene.add(mesh);
+        particles.push({ mesh: mesh, vel: new THREE.Vector3((Math.random()-0.5)*2.2, 3+Math.random()*2.5, (Math.random()-0.5)*2.2), life: 0.8, decay: 1.2+Math.random(), type: 'dmg' });
+    }
+}
+function updateParticles(dt) {
+    for (let i = particles.length - 1; i >= 0; i--) {
+        const p = particles[i]; p.life -= dt * p.decay; p.mesh.position.addScaledVector(p.vel, dt);
+        p.mesh.scale.setScalar(p.life); p.mesh.rotation.y += dt*3;
+        if (p.life <= 0) { scene.remove(p.mesh); particles.splice(i, 1); }
+    }
+}
+
+/* ==========================================
+   物理判定 & 遊戲主迴圈
+========================================== */
+function animate() {
+    if (gameState !== 'PLAYING') return;
+    requestAnimationFrame(animate);
+    const dt = Math.min(clock.getDelta(), 0.1);
+
+    if (!isPaused) {
+        updateLocalPlayerPhysics(dt);
+        if (!isMultiplayer) updateBotsAI(dt); 
+        updateLightBeamMechanics(dt);
+        updateParticles(dt);
+        updateNetworkSync();
+    }
+    updateCameraFollow(); updateHUDOverlay();
+    renderer.render(scene, camera);
+}
+
+function updateBotsAI(dt) {
+    for (let key in players) {
+        if (!key.startsWith('bot_')) continue;
+        const bot = players[key];
+        if (!bot.ai) continue;
+
+        const now = Date.now();
+        if (now > bot.ai.changeTargetTime) {
+            bot.ai.targetPos = getRandomSpawnPosition();
+            bot.ai.changeTargetTime = now + 2000 + Math.random() * 3000;
+        }
+
+        if (now > bot.ai.actionTimer) {
+            bot.isLightOn = Math.random() > 0.3; 
+            bot.isLightFocus = Math.random() > 0.5;
+            if (Math.random() > 0.8) {
+                bot.lightColorIndex = Math.floor(Math.random() * 3);
+                bot.bodyColorIndex = Math.floor(Math.random() * 3);
+                bot.capsuleMesh.material.color.setHex(COLORS[bot.bodyColorIndex].hex);
+            }
+            bot.ai.actionTimer = now + 1000 + Math.random() * 2000;
+        }
+
+        const toTarget = bot.ai.targetPos.clone().sub(bot.mesh.position);
+        toTarget.y = 0; 
+        
+        if (toTarget.length() > 5) {
+            toTarget.normalize();
+            const targetRotY = Math.atan2(toTarget.x, toTarget.z);
+            let diff = targetRotY - bot.mesh.rotation.y;
+            while (diff < -Math.PI) diff += Math.PI * 2;
+            while (diff > Math.PI) diff -= Math.PI * 2;
+            bot.mesh.rotation.y += diff * 5 * dt;
+
+            const speed = bot.ai.moveSpeed;
+            // 冰原滑行模擬：保留一點先前的動量
+            bot.velocity.x = bot.velocity.x * 0.95 + (toTarget.x * speed) * 0.05;
+            bot.velocity.z = bot.velocity.z * 0.95 + (toTarget.z * speed) * 0.05;
+        } else {
+            bot.velocity.x *= 0.85;
+            bot.velocity.z *= 0.85;
+        }
+
+        // 配合大尺寸的重力
+        if (!bot.onGround) bot.velocity.y -= 100.0 * dt; else bot.velocity.y = Math.max(0, bot.velocity.y);
+        bot.mesh.position.addScaledVector(bot.velocity, dt);
+
+        if (bot.mesh.position.y <= 0) {
+            if (Math.abs(bot.mesh.position.x) < GAME_SETTINGS.mapSize && Math.abs(bot.mesh.position.z) < GAME_SETTINGS.mapSize) {
+                bot.mesh.position.y = 0; bot.onGround = true;
+            } else {
+                bot.onGround = false;
+                if (bot.mesh.position.y < -30) {
+                    bot.hp = 100;
+                    bot.velocity.set(0,0,0);
+                    bot.mesh.position.copy(getRandomSpawnPosition());
+                }
+            }
+        }
+
+        // Bot 碰到加速帶
+        pads.forEach(pad => {
+            const dx = bot.mesh.position.x - pad.pos.x; const dz = bot.mesh.position.z - pad.pos.z;
+            if (dx*dx + dz*dz < pad.radius*pad.radius && Math.abs(bot.mesh.position.y - pad.pos.y) < 3) {
+                if (!pad.cooldowns[key]) {
+                    pad.cooldowns[key] = true;
+                    // 【修改點】以 Bot 目前的速度滑行方向進行推力，而非固定正前方
+                    const pushForce = 50.0 * GAME_SETTINGS.padPush; 
+                    let pushDir = new THREE.Vector3(bot.velocity.x, 0, bot.velocity.z);
+                    if (pushDir.lengthSq() > 0.1) pushDir.normalize();
+                    else pushDir.set(0, 0, 1).applyAxisAngle(new THREE.Vector3(0, 1, 0), bot.mesh.rotation.y);
+                    
+                    bot.velocity.x += pushDir.x * pushForce;
+                    bot.velocity.z += pushDir.z * pushForce;
+                    setTimeout(() => { pad.cooldowns[key] = false; }, (GAME_SETTINGS.padCooldown/60)*1000);
+                }
+            }
+        });
+
+        updateRemoteLightCone(bot);
+    }
+}
+
+function updateLocalPlayerPhysics(dt) {
+    const p = localPlayer;
+    // 重力配合大尺寸改強
+    if (!p.onGround) p.velocity.y -= 100.0 * dt; else p.velocity.y = Math.max(0, p.velocity.y);
+
+    // 基礎速度配合大尺寸改快
+    let speed = 45.0; if (keys['shift']) speed *= 1.5;
+    let moveX = 0, moveZ = 0;
+    if (keys['w']) moveZ += 1; if (keys['s']) moveZ -= 1;
+    if (keys['a']) moveX += 1; if (keys['d']) moveX -= 1;
+    
+    const direction = new THREE.Vector3(moveX, 0, moveZ).normalize().applyAxisAngle(new THREE.Vector3(0, 1, 0), p.yRotation);
+    
+    if (moveX === 0 && moveZ === 0) {
+        p.velocity.x *= 0.85;
+        p.velocity.z *= 0.85;
+    } else {
+        const currentSpeed = Math.hypot(p.velocity.x, p.velocity.z);
+        if(currentSpeed <= speed) {
+            p.velocity.x = direction.x * speed;
+            p.velocity.z = direction.z * speed;
+        } else {
+             // 超過正常速度(例如踩到加速帶)，隨時間衰減並允許些微轉向
+             p.velocity.x = p.velocity.x * 0.95 + direction.x * speed * 0.05;
+             p.velocity.z = p.velocity.z * 0.95 + direction.z * speed * 0.05;
+        }
+    }
+
+    if (keys[' '] && p.onGround) { p.velocity.y = 40.0; p.onGround = false; }
+    p.mesh.position.addScaledVector(p.velocity, dt);
+
+    if (p.mesh.position.y <= 0) {
+        if (Math.abs(p.mesh.position.x) < GAME_SETTINGS.mapSize && Math.abs(p.mesh.position.z) < GAME_SETTINGS.mapSize) {
+            p.mesh.position.y = 0; p.onGround = true;
+        } else {
+            p.onGround = false;
+            if (p.mesh.position.y < -30) killLocalPlayer("虛空");
+        }
+    }
+
+    // 【修改點】修正尖刺碰撞，透過適當的高低差檢測與邊界寬容
+    spikes.forEach(spike => {
+        const dx = p.mesh.position.x - spike.pos.x; const dz = p.mesh.position.z - spike.pos.z;
+        const triggerDist = p.radius + spike.radius - 1; // 寬容判定
+        // p.mesh.position.y 代表玩家膠囊底部
+        if (dx*dx + dz*dz < triggerDist * triggerDist && p.mesh.position.y < spike.height && p.mesh.position.y + p.height > 0) {
+            if (!spike.cooldown) {
+                spike.cooldown = true; damageLocalPlayer((GAME_SETTINGS.spikeDamage/100)*100, "尖刺"); playSound('spike');
+                p.velocity.add(new THREE.Vector3(dx, 0, dz).normalize().multiplyScalar(60)); p.velocity.y = 30; p.onGround = false;
+                spike.mesh.material.emissive.setHex(0xffffff); setTimeout(() => { spike.mesh.material.emissive.setHex(0x000000); spike.cooldown = false; }, 1000);
+            }
+        }
+    });
+
+    // 加速帶 (純推力，不跳躍)
+    pads.forEach(pad => {
+        const dx = p.mesh.position.x - pad.pos.x; const dz = p.mesh.position.z - pad.pos.z;
+        if (dx*dx + dz*dz < pad.radius*pad.radius && Math.abs(p.mesh.position.y - pad.pos.y) < 3) {
+            const myIdKey = myPeerId || 'local';
+            if (!pad.cooldowns[myIdKey]) {
+                pad.cooldowns[myIdKey] = true;
+                // 【修改點】依照玩家目前的按鍵輸入方向，或者滑行慣性方向進行加速
+                const pushForce = 50.0 * GAME_SETTINGS.padPush; 
+                let pushDir = new THREE.Vector3();
+                if (moveX !== 0 || moveZ !== 0) {
+                    pushDir.copy(direction); // 依照玩家 WASD 按下時預期的實際方向
+                } else if (Math.abs(p.velocity.x) > 0.1 || Math.abs(p.velocity.z) > 0.1) {
+                    pushDir.set(p.velocity.x, 0, p.velocity.z).normalize(); // 若沒按鍵但有慣性，沿著慣性方向衝
+                } else {
+                    pushDir.set(0, 0, 1).applyAxisAngle(new THREE.Vector3(0, 1, 0), p.yRotation); // 靜止時預設朝畫面正前方
+                }
+                
+                p.velocity.x += pushDir.x * pushForce;
+                p.velocity.z += pushDir.z * pushForce;
+
+                playSound('boost'); spawnHealParticles(p.mesh.position);
+                pad.mesh.material.color.setHex(0xffffff); setTimeout(() => { pad.mesh.material.color.setHex(0x06b6d4); pad.cooldowns[myIdKey] = false; }, (GAME_SETTINGS.padCooldown/60)*1000);
+            }
+        }
+    });
+    p.mesh.rotation.y = p.yRotation;
+}
+
+function updateLightBeamMechanics(dt) {
+    const p = localPlayer;
+    p.isLightOn = mouse.left || mouse.right; p.isLightFocus = mouse.right;
+    if (!p.isLightOn) { lightConeMesh.material.opacity = 0; return; }
+
+    // 視距範圍放大
+    if (p.isLightFocus) { lightConeMesh.scale.set(3, 3, 180); lightConeMesh.material.opacity = 0.55; } 
+    else { lightConeMesh.scale.set(20, 20, 70); lightConeMesh.material.opacity = 0.25; }
+
+    const eyePos = new THREE.Vector3(0, p.height * 0.75, 0).applyMatrix4(p.mesh.matrixWorld);
+    const forward = new THREE.Vector3(0, 0, 1).applyAxisAngle(new THREE.Vector3(0, 1, 0), p.yRotation);
+    const healRate = p.isLightFocus ? 10 : 5; const dmgRate = p.isLightFocus ? 10 : 5;
+    const maxRange = p.isLightFocus ? 180 : 70;
+
+    for (let key in players) {
+        if (key === myPeerId || (key === 'local' && !myPeerId)) continue;
+        const target = players[key]; const toTarget = target.mesh.position.clone().sub(eyePos);
+        if (toTarget.length() < maxRange) {
+            toTarget.normalize();
+            if (forward.angleTo(toTarget) < (p.isLightFocus ? 0.08 : 0.45)) {
+                if (p.lightColorIndex === target.bodyColorIndex) {
+                    if (isMultiplayer) broadcast({ type: 'trigger_heal', targetId: key, amount: healRate * dt }); 
+                    else {
+                        if (key.startsWith('bot_') && target.hp < 100) target.hp = Math.min(100, target.hp + healRate * dt);
+                        else if (key === myPeerId || key === 'local') healLocalPlayer(healRate * dt);
+                    }
+                } else {
+                    if (isMultiplayer) broadcast({ type: 'trigger_damage', targetId: key, amount: dmgRate * dt, attackerId: myPeerId });
+                    else {
+                        if (key.startsWith('bot_')) {
+                            target.hp -= dmgRate * dt;
+                            if (target.hp <= 0) {
+                                target.deaths++; p.kills++; showToast(`💥 你消滅了 ${target.name}！`); playSound('kill');
+                                target.hp = 100; target.mesh.position.copy(getRandomSpawnPosition());
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    if (!isMultiplayer) {
+        for (let attackerKey in players) {
+            if (!attackerKey.startsWith('bot_')) continue;
+            const attacker = players[attackerKey];
+            if (!attacker.isLightOn) continue;
+
+            const attEyePos = new THREE.Vector3(0, attacker.height * 0.75, 0).applyMatrix4(attacker.mesh.matrixWorld);
+            const attForward = new THREE.Vector3(0, 0, 1).applyAxisAngle(new THREE.Vector3(0, 1, 0), attacker.mesh.rotation.y);
+            const attMaxRange = attacker.isLightFocus ? 180 : 70;
+
+            for (let targetKey in players) {
+                if (attackerKey === targetKey) continue;
+                const target = players[targetKey];
+                const toTarget = target.mesh.position.clone().sub(attEyePos);
+
+                if (toTarget.length() < attMaxRange) {
+                    toTarget.normalize();
+                    if (attForward.angleTo(toTarget) < (attacker.isLightFocus ? 0.08 : 0.45)) {
+                        if (attacker.lightColorIndex !== target.bodyColorIndex) {
+                            if (targetKey === 'local' || targetKey === myPeerId) {
+                                damageLocalPlayer(dmgRate * dt, attackerKey);
+                            } else if (targetKey.startsWith('bot_')) {
+                                target.hp -= dmgRate * dt;
+                                if (target.hp <= 0) {
+                                    target.deaths++; attacker.kills++; target.hp = 100;
+                                    target.mesh.position.copy(getRandomSpawnPosition());
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+function healLocalPlayer(amount) {
+    const p = localPlayer; if (p.hp >= 100) return;
+    p.hp = Math.min(100, p.hp + amount); spawnHealParticles(p.mesh.position); playSound('heal');
+}
+
+function damageLocalPlayer(amount, attackerId) {
+    const p = localPlayer; p.hp = Math.max(0, p.hp - amount);
+    p.capsuleMesh.position.x = (Math.random()-0.5)*0.5; setTimeout(() => p.capsuleMesh.position.x = 0, 50);
+    spawnDamageParticles(p.mesh.position); playSound('damage');
+
+    if (p.hp <= 0) {
+        let killer = "神秘力量"; if (attackerId === "尖刺") killer = "尖刺陷阱"; else if (attackerId === "虛空") killer = "無盡虛空"; else if (players[attackerId]) killer = players[attackerId].name;
+        killLocalPlayer(killer);
+    }
+}
+
+function killLocalPlayer(killerName) {
+    localPlayer.deaths++; showToast(`💀 你被 ${killerName} 消滅了！`);
+    if (isMultiplayer) broadcast({ type: 'player_killed', victimName: localPlayerName, killerName: killerName });
+    localPlayer.hp = 100; localPlayer.velocity.set(0, 0, 0); localPlayer.mesh.position.copy(getRandomSpawnPosition());
+}
+
+function updateNetworkSync() {
+    if (!isMultiplayer) return;
+    const myData = { id: myPeerId, name: localPlayerName, x: localPlayer.mesh.position.x, y: localPlayer.mesh.position.y, z: localPlayer.mesh.position.z, ry: localPlayer.mesh.rotation.y, bodyColor: localPlayer.bodyColorIndex, lightColor: localPlayer.lightColorIndex, isLightOn: localPlayer.isLightOn, isLightFocus: localPlayer.isLightFocus, hp: localPlayer.hp, kills: localPlayer.kills, deaths: localPlayer.deaths };
+    if (isHost) {
+        let playersState = [myData];
+        for (let key in players) if (key !== myPeerId && players[key]) {
+            const p = players[key]; playersState.push({ id: key, name: p.name, x: p.mesh.position.x, y: p.mesh.position.y, z: p.mesh.position.z, ry: p.mesh.rotation.y, bodyColor: p.bodyColorIndex, lightColor: p.lightColorIndex, isLightOn: p.isLightOn, isLightFocus: p.isLightFocus, hp: p.hp, kills: p.kills, deaths: p.deaths });
+        }
+        broadcast({ type: 'sync_players', players: playersState });
+    } else broadcast(myData);
+}
+
+// 【修改點】相機視角因應人物變大而繼續拉遠
+function updateCameraFollow() {
+    if (!localPlayer.mesh) return;
+    const offset = new THREE.Vector3(0, localPlayer.height + 15, -localPlayer.height * 2.5);
+    offset.applyAxisAngle(new THREE.Vector3(1, 0, 0), cameraPitch);
+    offset.applyAxisAngle(new THREE.Vector3(0, 1, 0), localPlayer.yRotation);
+    const targetCamPos = localPlayer.mesh.position.clone().add(offset);
+    camera.position.lerp(targetCamPos, 0.15);
+    camera.lookAt(localPlayer.mesh.position.clone().add(new THREE.Vector3(0, localPlayer.height * 0.5, 0)));
+}
+
+function updateHUDOverlay() {
+    const listEl = document.getElementById('leaderboard-list'); let rankList = [];
+    for (let key in players) rankList.push({ name: players[key].name || (key === myPeerId ? localPlayerName : '連線玩家'), kills: players[key].kills, deaths: players[key].deaths, isMe: key === myPeerId, colorHex: COLORS[players[key].bodyColorIndex].hex });
+    rankList.sort((a, b) => b.kills - a.kills);
+
+    let html = '';
+    rankList.forEach((e, idx) => {
+        const style = e.isMe ? 'background: rgba(255,255,255,0.1); border: 1px solid rgba(56, 189, 248, 0.3);' : '';
+        html += `<div class="leaderboard-entry" style="${style}">
+                    <div style="display:flex; align-items:center; gap:8px;">
+                        <span style="color:#94a3b8; width:15px;">${idx + 1}.</span>
+                        <span style="width:12px; height:12px; border-radius:50%; background:#${e.colorHex.toString(16)}; border:2px solid rgba(255,255,255,0.8);"></span>
+                        <span style="color:${e.isMe ? '#38bdf8' : 'white'}">${e.name}</span>
+                    </div>
+                    <span style="color: #fcd34d; font-family: monospace;">${e.kills}K</span>
+                 </div>`;
+    });
+    listEl.innerHTML = html;
+
+    for (let key in players) {
+        const p = players[key]; if (!p.mesh) continue;
+        let barId = `hp-bar-${key}`; let barEl = document.getElementById(barId);
+        if (!barEl) {
+            barEl = document.createElement('div'); barEl.id = barId;
+            barEl.style = 'position:absolute; pointer-events:none; background:rgba(15,23,42,0.7); padding:4px 8px; border-radius:8px; border:1px solid rgba(255,255,255,0.2); color:#fff; font-size:12px; text-align:center; transform:translate(-50%,-100%); z-index:4; backdrop-filter:blur(4px);';
+            document.body.appendChild(barEl);
+        }
+        if (!GAME_SETTINGS.hpBarPersistent && key !== myPeerId) barEl.style.display = (p.hp < 100) ? 'block' : 'none'; else barEl.style.display = 'block';
+
+        const screenPos = p.mesh.position.clone().add(new THREE.Vector3(0, p.height + 2.5, 0)).project(camera);
+        if (screenPos.z > 1) barEl.style.display = 'none';
+        else {
+            barEl.style.left = `${(screenPos.x*.5+.5)*window.innerWidth}px`; barEl.style.top = `${(-screenPos.y*.5+.5)*window.innerHeight}px`;
+            const hpP = Math.floor(p.hp); const cName = COLORS[p.bodyColorIndex].name; const cHex = '#'+COLORS[p.bodyColorIndex].hex.toString(16);
+            barEl.innerHTML = `<strong style="color:${cHex}">${p.name}</strong><br>
+                               <div style="background:#334155; width:80px; height:6px; border-radius:3px; margin:4px auto 0; overflow:hidden;">
+                                    <div style="background:${p.hp<30?'#ef4444':'#10b981'}; width:${hpP}%; height:100%; transition:width 0.2s;"></div>
+                               </div>`;
+        }
+    }
+    document.querySelectorAll('[id^="hp-bar-"]').forEach(el => { if (!players[el.id.replace('hp-bar-','')]) el.remove(); });
+}
+
+function endGame() {
+    isPaused = true; document.exitPointerLock(); if (timerInterval) clearInterval(timerInterval);
+    let maxKills = -1; let winner = '無';
+    for (let key in players) if (players[key].kills > maxKills) { maxKills = players[key].kills; winner = players[key].name || localPlayerName; }
+    alert(`時間結束！\n🏆 本局贏家: ${winner} (${maxKills} 擊殺)\n點擊確定返回。`);
+    window.location.reload();
+}
+</script>
+</body>
+</html>
