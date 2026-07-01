@@ -400,8 +400,8 @@
             </div>
 
             <div style="display: flex; gap: 10px; margin-top: 15px;">
-                <button class="btn btn-success" id="start-btn" onclick="startGame()" style="margin-bottom: 0;">開始遊戲</button>
-                <button class="btn btn-danger" onclick="cancelSetup()" style="margin-bottom: 0;">取消</button>
+                <button class="btn btn-success" id="start-btn" onclick="startGame()">開始遊戲</button>
+                <button class="btn btn-danger" onclick="cancelSetup()">取消</button>
             </div>
         </div>
     </div>
@@ -447,10 +447,25 @@
         </div>
     </div>
 
+    <!-- 遊戲結束結算畫面 -->
+    <div id="game-over-screen" class="ui-layer hidden" style="background: rgba(2, 6, 23, 0.85); backdrop-filter: blur(12px);">
+        <div class="panel" style="text-align: center; border-color: rgba(252, 211, 77, 0.35);">
+            <h1 class="game-title" style="font-size: 2.6rem; color: #fcd34d; text-shadow: 0 0 30px rgba(252, 211, 77, 0.4);">🏆 戰局結束</h1>
+            <div class="game-subtitle" style="color: #cbd5e1;">Match Over</div>
+            
+            <div class="menu-card" style="border-color: rgba(252, 211, 77, 0.2); padding: 25px; margin-top: 15px; background: rgba(0,0,0,0.3);">
+                <h3 id="winner-announce" style="font-size: 1.5rem; color: #fcd34d; margin-bottom: 8px;">最終贏家：載入中...</h3>
+                <p id="winner-detail" style="font-size: 1.05rem; color: #94a3b8; margin: 0; font-weight: 600;">以 0 擊殺取得第一名！</p>
+            </div>
+
+            <button class="btn btn-primary" onclick="window.location.reload()" style="margin-top: 20px;">返回主選單</button>
+        </div>
+    </div>
+
     <!-- HUD 抬頭顯示 -->
     <div id="hud">
         <div id="crosshair"></div>
-        <div id="instruction" class="hidden">點擊畫面鎖定視角 | WASD 移動 | Q 換色 | 左右鍵 射光</div>
+        <div id="instruction" class="hidden">點擊畫面鎖定視角 | WASD 移動 | Q 換色 | E 換燈 | 左右鍵 射擊</div>
         <div id="settings-btn" title="設定 (ESC)">⚙️</div>
         
         <div class="hud-top-right">
@@ -477,7 +492,7 @@ let sensitivity = 1.0;
 let timeRemaining = 300; 
 let timerInterval = null;
 
-// 遊戲設定 (改回預設人物比例 1.0)
+// 遊戲設定
 let GAME_SETTINGS = {
     timeLimit: 5,
     mapSize: 400,
@@ -721,6 +736,7 @@ function handleNetworkData(senderPeerId, data) {
                 p.lightColorIndex = pData.lightColor;
                 p.isLightOn = pData.isLightOn;
                 p.isLightFocus = pData.isLightFocus;
+                p.pitch = pData.pitch || 0; // 同步各玩家的垂直視角
                 p.hp = pData.hp; p.kills = pData.kills; p.deaths = pData.deaths;
                 p.capsuleMesh.material.color.setHex(COLORS[pData.bodyColor].hex);
                 updateRemoteLightCone(p);
@@ -770,7 +786,7 @@ let localPlayer = {
     mesh: null, capsuleMesh: null,
     hp: 100, kills: 0, deaths: 0, bodyColorIndex: 0, lightColorIndex: 1,
     isLightOn: false, isLightFocus: false, velocity: new THREE.Vector3(),
-    onGround: false, radius: 0.8, height: 2.2, yRotation: 0
+    onGround: false, radius: 0.8, height: 2.2, yRotation: 0, pitch: 0
 };
 let localPlayerName = "我";
 let players = {}; let spikes = []; let pads = []; let particles = [];
@@ -782,7 +798,7 @@ let cameraPitch = 0; let isPaused = false;
 const groundMat = new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.9 });
 const gridColorMain = 0x334155, gridColorSub = 0x1e293b;
 const spikeMat = new THREE.MeshStandardMaterial({ color: 0xe11d48, roughness: 0.4, metalness: 0.5 });
-const padMat = new THREE.MeshBasicMaterial({ color: 0x06b6d4 }); // 改為純色無光影材質
+const padMat = new THREE.MeshBasicMaterial({ color: 0x06b6d4 }); // 純色發光感材質
 
 function createCapsule(radius, height, colorHex) {
     const group = new THREE.Group();
@@ -830,7 +846,7 @@ function buildWorldAndStart() {
     sun.shadow.camera.left = -d; sun.shadow.camera.right = d; sun.shadow.camera.top = d; sun.shadow.camera.bottom = -d;
     scene.add(sun);
 
-    // 建立大範圍地板 (正方形)
+    // 地板 (正方形)
     const mapS = GAME_SETTINGS.mapSize;
     const floor = new THREE.Mesh(new THREE.PlaneGeometry(mapS * 2, mapS * 2), groundMat);
     floor.rotation.x = -Math.PI / 2; floor.receiveShadow = true; scene.add(floor);
@@ -845,7 +861,7 @@ function buildWorldAndStart() {
     const ringMat = new THREE.MeshBasicMaterial({ color: 0x38bdf8, side: THREE.DoubleSide, transparent: true, opacity: 0.5 });
     const ring = new THREE.Mesh(ringGeo, ringMat); ring.rotation.x = Math.PI / 2; ring.position.y = 0.15; scene.add(ring);
 
-    // 【修改點】將人物基礎大小變大 (半徑5，高度14)，高於尖刺 (高度10)
+    // 人物基礎大小
     localPlayer.radius = 5.0 * GAME_SETTINGS.playerSize; 
     localPlayer.height = 14.0 * GAME_SETTINGS.playerSize;
     localPlayer.hp = 100; localPlayer.kills = 0; localPlayer.deaths = 0; localPlayer.velocity.set(0,0,0);
@@ -868,7 +884,6 @@ function buildWorldAndStart() {
             p.lightColorIndex = Math.floor(Math.random() * 3);
             p.capsuleMesh.material.color.setHex(COLORS[p.bodyColorIndex].hex);
             
-            // 初始化 AI 行為參數
             p.ai = {
                 targetPos: getRandomSpawnPosition(),
                 changeTargetTime: 0,
@@ -905,21 +920,18 @@ function generateMapAssets() {
     const randomFunc = () => { if (remoteObstaclesSeed !== null) { let x = Math.sin(remoteObstaclesSeed++) * 10000; return x - Math.floor(x); } return Math.random(); };
     const mapR = GAME_SETTINGS.mapSize;
 
-    // 【修改點】將尖刺微縮小，使其比玩家的基礎大小稍小 (高度10，半徑3)
     const sGeo = new THREE.ConeGeometry(3, 10, 8);
     for (let i = 0; i < GAME_SETTINGS.spikeCount; i++) {
         const mesh = new THREE.Mesh(sGeo, spikeMat);
-        mesh.position.set((randomFunc()-0.5) * mapR * 1.6, 5, (randomFunc()-0.5) * mapR * 1.6); // 高度一半
+        mesh.position.set((randomFunc()-0.5) * mapR * 1.6, 5, (randomFunc()-0.5) * mapR * 1.6);
         mesh.castShadow = true; mesh.receiveShadow = true; scene.add(mesh);
         spikes.push({ mesh: mesh, pos: mesh.position, radius: 3, height: 10 });
     }
 
-    // 圓形平面加速帶 (加大半徑)
     const pGeo = new THREE.CylinderGeometry(12, 12, 0.5, 16);
     for (let i = 0; i < GAME_SETTINGS.padCount; i++) {
         const mesh = new THREE.Mesh(pGeo, padMat);
         mesh.position.set((randomFunc()-0.5) * mapR * 1.6, 0.25, (randomFunc()-0.5) * mapR * 1.6);
-        // 【修改點】移除不必要的箭頭指標，因為現在是依據玩家當前方向加速
         scene.add(mesh);
         pads.push({ mesh: mesh, pos: mesh.position, radius: 12, cooldowns: {} });
     }
@@ -936,7 +948,6 @@ function createLightConeVisual() {
 
 function spawnRemotePlayer(id, name) {
     if (players[id]) return players[id];
-    // 【修改點】基礎大小同步更改
     const rSize = 5.0 * GAME_SETTINGS.playerSize; const hSize = 14.0 * GAME_SETTINGS.playerSize;
     const capObj = createCapsule(rSize, hSize, COLORS[0].hex); const pMesh = capObj.group; scene.add(pMesh);
     const remoteLightCone = createLightConeVisual(); pMesh.add(remoteLightCone);
@@ -945,7 +956,7 @@ function spawnRemotePlayer(id, name) {
         mesh: pMesh, capsuleMesh: capObj.visualMesh, name: name, hp: 100, kills: 0, deaths: 0, 
         bodyColorIndex: 0, lightColorIndex: 1, isLightOn: false, isLightFocus: false, 
         lightCone: remoteLightCone, radius: rSize, height: hSize,
-        velocity: new THREE.Vector3(), onGround: false, yRotation: 0 
+        velocity: new THREE.Vector3(), onGround: false, yRotation: 0, pitch: 0 
     };
     return players[id];
 }
@@ -954,9 +965,9 @@ function updateRemoteLightCone(p) {
     if (!p.lightCone) return;
     if (!p.isLightOn) { p.lightCone.material.opacity = 0; return; }
     p.lightCone.material.color.setHex(COLORS[p.lightColorIndex].hex);
-    // 配合大人物調整光束視覺尺度
     if (p.isLightFocus) { p.lightCone.scale.set(3, 3, 180); p.lightCone.material.opacity = 0.55; } 
     else { p.lightCone.scale.set(20, 20, 70); p.lightCone.material.opacity = 0.25; }
+    p.lightCone.rotation.set(p.pitch || 0, 0, 0); // 同步光束垂直傾斜
 }
 
 /* ==========================================
@@ -986,7 +997,6 @@ function setupInputListeners() {
         }
     });
     
-    // 綁定 ESC
     document.addEventListener('pointerlockchange', () => {
         if (gameState === 'PLAYING' && document.pointerLockElement !== document.body) {
             isPaused = true; showScreen('pause-menu');
@@ -1006,8 +1016,11 @@ function setupInputListeners() {
     window.addEventListener('mousedown', (e) => {
         initAudio();
         if (gameState !== 'PLAYING' || isPaused) return;
-        if (document.pointerLockElement !== document.body) { document.body.requestPointerLock(); return; }
-        if (e.button === 0) mouse.left = true; if (e.button === 2) mouse.right = true;
+        if (document.pointerLockElement === document.body) {
+            if (e.button === 0) mouse.left = true; if (e.button === 2) mouse.right = true;
+        } else {
+            document.body.requestPointerLock();
+        }
     });
     window.addEventListener('mouseup', (e) => { if (e.button === 0) mouse.left = false; if (e.button === 2) mouse.right = false; });
     window.addEventListener('contextmenu', e => e.preventDefault());
@@ -1096,7 +1109,6 @@ function updateBotsAI(dt) {
             bot.mesh.rotation.y += diff * 5 * dt;
 
             const speed = bot.ai.moveSpeed;
-            // 冰原滑行模擬：保留一點先前的動量
             bot.velocity.x = bot.velocity.x * 0.95 + (toTarget.x * speed) * 0.05;
             bot.velocity.z = bot.velocity.z * 0.95 + (toTarget.z * speed) * 0.05;
         } else {
@@ -1104,7 +1116,6 @@ function updateBotsAI(dt) {
             bot.velocity.z *= 0.85;
         }
 
-        // 配合大尺寸的重力
         if (!bot.onGround) bot.velocity.y -= 100.0 * dt; else bot.velocity.y = Math.max(0, bot.velocity.y);
         bot.mesh.position.addScaledVector(bot.velocity, dt);
 
@@ -1121,13 +1132,11 @@ function updateBotsAI(dt) {
             }
         }
 
-        // Bot 碰到加速帶
         pads.forEach(pad => {
             const dx = bot.mesh.position.x - pad.pos.x; const dz = bot.mesh.position.z - pad.pos.z;
             if (dx*dx + dz*dz < pad.radius*pad.radius && Math.abs(bot.mesh.position.y - pad.pos.y) < 3) {
                 if (!pad.cooldowns[key]) {
                     pad.cooldowns[key] = true;
-                    // 【修改點】以 Bot 目前的速度滑行方向進行推力，而非固定正前方
                     const pushForce = 50.0 * GAME_SETTINGS.padPush; 
                     let pushDir = new THREE.Vector3(bot.velocity.x, 0, bot.velocity.z);
                     if (pushDir.lengthSq() > 0.1) pushDir.normalize();
@@ -1146,10 +1155,8 @@ function updateBotsAI(dt) {
 
 function updateLocalPlayerPhysics(dt) {
     const p = localPlayer;
-    // 重力配合大尺寸改強
     if (!p.onGround) p.velocity.y -= 100.0 * dt; else p.velocity.y = Math.max(0, p.velocity.y);
 
-    // 基礎速度配合大尺寸改快
     let speed = 45.0; if (keys['shift']) speed *= 1.5;
     let moveX = 0, moveZ = 0;
     if (keys['w']) moveZ += 1; if (keys['s']) moveZ -= 1;
@@ -1166,7 +1173,6 @@ function updateLocalPlayerPhysics(dt) {
             p.velocity.x = direction.x * speed;
             p.velocity.z = direction.z * speed;
         } else {
-             // 超過正常速度(例如踩到加速帶)，隨時間衰減並允許些微轉向
              p.velocity.x = p.velocity.x * 0.95 + direction.x * speed * 0.05;
              p.velocity.z = p.velocity.z * 0.95 + direction.z * speed * 0.05;
         }
@@ -1184,11 +1190,9 @@ function updateLocalPlayerPhysics(dt) {
         }
     }
 
-    // 【修改點】修正尖刺碰撞，透過適當的高低差檢測與邊界寬容
     spikes.forEach(spike => {
         const dx = p.mesh.position.x - spike.pos.x; const dz = p.mesh.position.z - spike.pos.z;
-        const triggerDist = p.radius + spike.radius - 1; // 寬容判定
-        // p.mesh.position.y 代表玩家膠囊底部
+        const triggerDist = p.radius + spike.radius - 1; 
         if (dx*dx + dz*dz < triggerDist * triggerDist && p.mesh.position.y < spike.height && p.mesh.position.y + p.height > 0) {
             if (!spike.cooldown) {
                 spike.cooldown = true; damageLocalPlayer((GAME_SETTINGS.spikeDamage/100)*100, "尖刺"); playSound('spike');
@@ -1198,22 +1202,20 @@ function updateLocalPlayerPhysics(dt) {
         }
     });
 
-    // 加速帶 (純推力，不跳躍)
     pads.forEach(pad => {
         const dx = p.mesh.position.x - pad.pos.x; const dz = p.mesh.position.z - pad.pos.z;
         if (dx*dx + dz*dz < pad.radius*pad.radius && Math.abs(p.mesh.position.y - pad.pos.y) < 3) {
             const myIdKey = myPeerId || 'local';
             if (!pad.cooldowns[myIdKey]) {
                 pad.cooldowns[myIdKey] = true;
-                // 【修改點】依照玩家目前的按鍵輸入方向，或者滑行慣性方向進行加速
                 const pushForce = 50.0 * GAME_SETTINGS.padPush; 
                 let pushDir = new THREE.Vector3();
                 if (moveX !== 0 || moveZ !== 0) {
-                    pushDir.copy(direction); // 依照玩家 WASD 按下時預期的實際方向
+                    pushDir.copy(direction); 
                 } else if (Math.abs(p.velocity.x) > 0.1 || Math.abs(p.velocity.z) > 0.1) {
-                    pushDir.set(p.velocity.x, 0, p.velocity.z).normalize(); // 若沒按鍵但有慣性，沿著慣性方向衝
+                    pushDir.set(p.velocity.x, 0, p.velocity.z).normalize(); 
                 } else {
-                    pushDir.set(0, 0, 1).applyAxisAngle(new THREE.Vector3(0, 1, 0), p.yRotation); // 靜止時預設朝畫面正前方
+                    pushDir.set(0, 0, 1).applyAxisAngle(new THREE.Vector3(0, 1, 0), p.yRotation); 
                 }
                 
                 p.velocity.x += pushDir.x * pushForce;
@@ -1227,40 +1229,118 @@ function updateLocalPlayerPhysics(dt) {
     p.mesh.rotation.y = p.yRotation;
 }
 
+/* =============================================================
+   極精準 3D 膠囊體雷射交叉點碰撞檢測演算法 (解決中近距離打不中敵人血量的核心 Bug)
+   ============================================================= */
+function checkBeamHit(shooter, target, isFocus) {
+    const maxRange = isFocus ? 180 : 70;
+    const angleThreshold = isFocus ? 0.08 : 0.45;
+    
+    // 1. 強制更新發射者的世界矩陣，確保獲取當前影格最即時、精準的世界座標位置
+    shooter.mesh.updateMatrixWorld(true);
+    const eyePos = new THREE.Vector3(0, shooter.height * 0.75, 0).applyMatrix4(shooter.mesh.matrixWorld);
+    
+    // 2. 融合垂直視角（Pitch）與水平旋轉（Rotation），計算出在 3D 空間中極度精確的光束發射方向向量
+    const forward = new THREE.Vector3(0, 0, 1);
+    if (shooter === localPlayer) {
+        forward.applyAxisAngle(new THREE.Vector3(1, 0, 0), cameraPitch);
+        forward.applyAxisAngle(new THREE.Vector3(0, 1, 0), shooter.yRotation);
+    } else {
+        const pitchVal = shooter.pitch || 0;
+        const rotYVal = shooter.mesh.rotation.y;
+        forward.applyAxisAngle(new THREE.Vector3(1, 0, 0), pitchVal);
+        forward.applyAxisAngle(new THREE.Vector3(0, 1, 0), rotYVal);
+    }
+    forward.normalize();
+    
+    // 3. 取得目標玩家的位置參數
+    const targetX = target.mesh.position.x;
+    const targetY = target.mesh.position.y;
+    const targetZ = target.mesh.position.z;
+    
+    // 定義膠囊體內部中心線段的上下端點 y 軸
+    const botY = targetY + target.radius;
+    const topY = targetY + target.height - target.radius;
+    
+    // 4. 連續取樣：在目標中心線上由下到上均勻採樣 5 個高度點，這能完美覆蓋腳底、腹部與頭部的高度範圍
+    const numSamples = 5;
+    for (let i = 0; i < numSamples; i++) {
+        const t = i / (numSamples - 1);
+        const sampleY = botY + t * (topY - botY);
+        const targetPoint = new THREE.Vector3(targetX, sampleY, targetZ);
+        
+        // 發射點指向當前採樣點的向量
+        const toTarget = targetPoint.clone().sub(eyePos);
+        const dist = toTarget.length();
+        
+        if (dist < maxRange) {
+            toTarget.normalize();
+            const angle = forward.angleTo(toTarget);
+            
+            // 5. 寬容度補償（Thickness Angle）：根據目標半徑與距離，動態增加膠囊體本身的寬度弧度，使中近距離更加容易命中
+            const targetThicknessAngle = Math.atan(target.radius / Math.max(1.0, dist));
+            const allowedAngle = angleThreshold + targetThicknessAngle;
+            
+            if (angle < allowedAngle) {
+                return true; // 採樣點有任何一個落入錐體範圍內，即判定成功命中！
+            }
+        }
+    }
+    return false;
+}
+
 function updateLightBeamMechanics(dt) {
     const p = localPlayer;
     p.isLightOn = mouse.left || mouse.right; p.isLightFocus = mouse.right;
-    if (!p.isLightOn) { lightConeMesh.material.opacity = 0; return; }
+    
+    // 讓本機的光束視覺外觀（Light Cone）完美隨著滑鼠上下抬頭進行傾斜旋轉
+    if (lightConeMesh) {
+        if (!p.isLightOn) { 
+            lightConeMesh.material.opacity = 0; 
+        } else {
+            lightConeMesh.rotation.set(cameraPitch, 0, 0); // X軸旋轉同步上下抬頭
+            if (p.isLightFocus) { 
+                lightConeMesh.scale.set(3, 3, 180); 
+                lightConeMesh.material.opacity = 0.55; 
+            } else { 
+                lightConeMesh.scale.set(20, 20, 70); 
+                lightConeMesh.material.opacity = 0.25; 
+            }
+        }
+    }
 
-    // 視距範圍放大
-    if (p.isLightFocus) { lightConeMesh.scale.set(3, 3, 180); lightConeMesh.material.opacity = 0.55; } 
-    else { lightConeMesh.scale.set(20, 20, 70); lightConeMesh.material.opacity = 0.25; }
+    const healRate = p.isLightFocus ? 10 : 5; 
+    const dmgRate = p.isLightFocus ? 10 : 5;
 
-    const eyePos = new THREE.Vector3(0, p.height * 0.75, 0).applyMatrix4(p.mesh.matrixWorld);
-    const forward = new THREE.Vector3(0, 0, 1).applyAxisAngle(new THREE.Vector3(0, 1, 0), p.yRotation);
-    const healRate = p.isLightFocus ? 10 : 5; const dmgRate = p.isLightFocus ? 10 : 5;
-    const maxRange = p.isLightFocus ? 180 : 70;
-
-    for (let key in players) {
-        if (key === myPeerId || (key === 'local' && !myPeerId)) continue;
-        const target = players[key]; const toTarget = target.mesh.position.clone().sub(eyePos);
-        if (toTarget.length() < maxRange) {
-            toTarget.normalize();
-            if (forward.angleTo(toTarget) < (p.isLightFocus ? 0.08 : 0.45)) {
+    // 本機玩家進行光束判定
+    if (p.isLightOn) {
+        for (let key in players) {
+            if (key === myPeerId || (key === 'local' && !myPeerId)) continue;
+            const target = players[key];
+            
+            if (checkBeamHit(p, target, p.isLightFocus)) {
                 if (p.lightColorIndex === target.bodyColorIndex) {
-                    if (isMultiplayer) broadcast({ type: 'trigger_heal', targetId: key, amount: healRate * dt }); 
-                    else {
-                        if (key.startsWith('bot_') && target.hp < 100) target.hp = Math.min(100, target.hp + healRate * dt);
-                        else if (key === myPeerId || key === 'local') healLocalPlayer(healRate * dt);
+                    if (isMultiplayer) {
+                        broadcast({ type: 'trigger_heal', targetId: key, amount: healRate * dt }); 
+                    } else {
+                        if (key.startsWith('bot_') && target.hp < 100) {
+                            target.hp = Math.min(100, target.hp + healRate * dt);
+                        } else if (key === myPeerId || key === 'local') {
+                            healLocalPlayer(healRate * dt);
+                        }
                     }
                 } else {
-                    if (isMultiplayer) broadcast({ type: 'trigger_damage', targetId: key, amount: dmgRate * dt, attackerId: myPeerId });
-                    else {
+                    if (isMultiplayer) {
+                        broadcast({ type: 'trigger_damage', targetId: key, amount: dmgRate * dt, attackerId: myPeerId });
+                    } else {
                         if (key.startsWith('bot_')) {
                             target.hp -= dmgRate * dt;
                             if (target.hp <= 0) {
-                                target.deaths++; p.kills++; showToast(`💥 你消滅了 ${target.name}！`); playSound('kill');
-                                target.hp = 100; target.mesh.position.copy(getRandomSpawnPosition());
+                                target.deaths++; p.kills++; 
+                                showToast(`💥 你消滅了 ${target.name}！`); 
+                                playSound('kill');
+                                target.hp = 100; 
+                                target.mesh.position.copy(getRandomSpawnPosition());
                             }
                         }
                     }
@@ -1269,33 +1349,29 @@ function updateLightBeamMechanics(dt) {
         }
     }
 
+    // 單人模式下的機器人（NPC）自動進行交叉瞄準判定
     if (!isMultiplayer) {
         for (let attackerKey in players) {
             if (!attackerKey.startsWith('bot_')) continue;
             const attacker = players[attackerKey];
             if (!attacker.isLightOn) continue;
 
-            const attEyePos = new THREE.Vector3(0, attacker.height * 0.75, 0).applyMatrix4(attacker.mesh.matrixWorld);
-            const attForward = new THREE.Vector3(0, 0, 1).applyAxisAngle(new THREE.Vector3(0, 1, 0), attacker.mesh.rotation.y);
-            const attMaxRange = attacker.isLightFocus ? 180 : 70;
+            const attDmgRate = attacker.isLightFocus ? 10 : 5;
 
             for (let targetKey in players) {
                 if (attackerKey === targetKey) continue;
                 const target = players[targetKey];
-                const toTarget = target.mesh.position.clone().sub(attEyePos);
 
-                if (toTarget.length() < attMaxRange) {
-                    toTarget.normalize();
-                    if (attForward.angleTo(toTarget) < (attacker.isLightFocus ? 0.08 : 0.45)) {
-                        if (attacker.lightColorIndex !== target.bodyColorIndex) {
-                            if (targetKey === 'local' || targetKey === myPeerId) {
-                                damageLocalPlayer(dmgRate * dt, attackerKey);
-                            } else if (targetKey.startsWith('bot_')) {
-                                target.hp -= dmgRate * dt;
-                                if (target.hp <= 0) {
-                                    target.deaths++; attacker.kills++; target.hp = 100;
-                                    target.mesh.position.copy(getRandomSpawnPosition());
-                                }
+                if (checkBeamHit(attacker, target, attacker.isLightFocus)) {
+                    if (attacker.lightColorIndex !== target.bodyColorIndex) {
+                        if (targetKey === 'local' || targetKey === myPeerId) {
+                            damageLocalPlayer(attDmgRate * dt, attackerKey);
+                        } else if (targetKey.startsWith('bot_')) {
+                            target.hp -= attDmgRate * dt;
+                            if (target.hp <= 0) {
+                                target.deaths++; attacker.kills++; 
+                                target.hp = 100;
+                                target.mesh.position.copy(getRandomSpawnPosition());
                             }
                         }
                     }
@@ -1329,17 +1405,32 @@ function killLocalPlayer(killerName) {
 
 function updateNetworkSync() {
     if (!isMultiplayer) return;
-    const myData = { id: myPeerId, name: localPlayerName, x: localPlayer.mesh.position.x, y: localPlayer.mesh.position.y, z: localPlayer.mesh.position.z, ry: localPlayer.mesh.rotation.y, bodyColor: localPlayer.bodyColorIndex, lightColor: localPlayer.lightColorIndex, isLightOn: localPlayer.isLightOn, isLightFocus: localPlayer.isLightFocus, hp: localPlayer.hp, kills: localPlayer.kills, deaths: localPlayer.deaths };
+    const myData = { 
+        id: myPeerId, name: localPlayerName, 
+        x: localPlayer.mesh.position.x, y: localPlayer.mesh.position.y, z: localPlayer.mesh.position.z, 
+        ry: localPlayer.mesh.rotation.y, 
+        bodyColor: localPlayer.bodyColorIndex, lightColor: localPlayer.lightColorIndex, 
+        isLightOn: localPlayer.isLightOn, isLightFocus: localPlayer.isLightFocus, 
+        pitch: cameraPitch, // 同步本機玩家的垂直角度給所有人
+        hp: localPlayer.hp, kills: localPlayer.kills, deaths: localPlayer.deaths 
+    };
     if (isHost) {
         let playersState = [myData];
         for (let key in players) if (key !== myPeerId && players[key]) {
-            const p = players[key]; playersState.push({ id: key, name: p.name, x: p.mesh.position.x, y: p.mesh.position.y, z: p.mesh.position.z, ry: p.mesh.rotation.y, bodyColor: p.bodyColorIndex, lightColor: p.lightColorIndex, isLightOn: p.isLightOn, isLightFocus: p.isLightFocus, hp: p.hp, kills: p.kills, deaths: p.deaths });
+            const p = players[key]; playersState.push({ 
+                id: key, name: p.name, 
+                x: p.mesh.position.x, y: p.mesh.position.y, z: p.mesh.position.z, 
+                ry: p.mesh.rotation.y, 
+                bodyColor: p.bodyColorIndex, lightColor: p.lightColorIndex, 
+                isLightOn: p.isLightOn, isLightFocus: p.isLightFocus, 
+                pitch: p.pitch || 0, // 轉發玩家們的垂直角度
+                hp: p.hp, kills: p.kills, deaths: p.deaths 
+            });
         }
         broadcast({ type: 'sync_players', players: playersState });
     } else broadcast(myData);
 }
 
-// 【修改點】相機視角因應人物變大而繼續拉遠
 function updateCameraFollow() {
     if (!localPlayer.mesh) return;
     const offset = new THREE.Vector3(0, localPlayer.height + 15, -localPlayer.height * 2.5);
@@ -1394,11 +1485,26 @@ function updateHUDOverlay() {
 }
 
 function endGame() {
-    isPaused = true; document.exitPointerLock(); if (timerInterval) clearInterval(timerInterval);
-    let maxKills = -1; let winner = '無';
-    for (let key in players) if (players[key].kills > maxKills) { maxKills = players[key].kills; winner = players[key].name || localPlayerName; }
-    alert(`時間結束！\n🏆 本局贏家: ${winner} (${maxKills} 擊殺)\n點擊確定返回。`);
-    window.location.reload();
+    isPaused = true; 
+    document.exitPointerLock(); 
+    if (timerInterval) clearInterval(timerInterval);
+    
+    let maxKills = -1; 
+    let winner = '無';
+    for (let key in players) {
+        if (players[key].kills > maxKills) { 
+            maxKills = players[key].kills; 
+            winner = players[key].name || localPlayerName; 
+        }
+    }
+    
+    // 取代 alert，直接將數據渲染進精心製作的結算 UI Modal
+    document.getElementById('winner-announce').innerText = `👑 最終贏家：${winner}`;
+    document.getElementById('winner-detail').innerText = `以 ${maxKills} 擊殺成功奪冠！`;
+    
+    // 隱藏一般 HUD，顯示結算畫面
+    document.getElementById('hud').style.display = 'none';
+    showScreen('game-over-screen');
 }
 </script>
 </body>
