@@ -310,10 +310,7 @@
             </div>
 
             <button class="btn btn-success" onclick="selectMode('single')">💻 單人離線模式</button>
-            <button class="btn btn-primary" onclick="selectMode('multi')" style="background: linear-gradient(135deg, #475569 0%, #334155 100%); box-shadow: none;">
-                🌐 多人連線模式
-                <div style="font-size: 0.85rem; font-weight: normal; margin-top: 5px; color: #cbd5e1;">(預覽環境受阻，請匯出後遊玩)</div>
-            </button>
+            <button class="btn btn-primary" onclick="selectMode('multi')">🌐 多人連線模式</button>
         </div>
     </div>
 
@@ -535,7 +532,7 @@ function showToast(message, isSuccess = false) {
     setTimeout(() => {
         toast.classList.remove('show');
         setTimeout(() => toast.remove(), 300);
-    }, 3500);
+    }, 3000);
 }
 
 function copyRoomId(fromPause = false) {
@@ -600,7 +597,7 @@ function playSound(type) {
 }
 
 /* ==========================================
-   PeerJS 網路通訊架構 (安全模式阻擋)
+   PeerJS 網路通訊架構
 ========================================== */
 function selectMode(mode) {
     initAudio();
@@ -613,9 +610,10 @@ function selectMode(mode) {
         document.getElementById('set-npc').style.display = 'block';
         showScreen('setup-screen');
     } else {
-        // 在 Canvas 預覽環境中攔截外部 WebSocket 連線，防止 SecurityError 崩潰
         isMultiplayer = true;
-        showToast('⚠️ Canvas 預覽環境安全性限制，無法使用外部 WebSocket 連線。請點擊右上角「匯出」後，在本地瀏覽器開啟即可完美遊玩多人模式！');
+        document.getElementById('npc-count-setting').style.display = 'none';
+        document.getElementById('set-npc').style.display = 'none';
+        showScreen('multiplayer-menu');
     }
 }
 
@@ -630,68 +628,57 @@ function generateRandomRoomId() {
 
 function initHost() {
     showToast('正在向伺服器申請房號...');
-    try {
-        const targetRoomId = generateRandomRoomId();
-        peer = new Peer(targetRoomId);
+    const targetRoomId = generateRandomRoomId();
+    peer = new Peer(targetRoomId);
 
-        peer.on('open', (id) => {
-            myPeerId = id; isHost = true;
-            document.getElementById('setup-title').innerText = '多人大廳 (主機)';
-            document.getElementById('display-room-id').value = id;
-            document.getElementById('pause-display-room-id').innerText = id;
-            document.getElementById('room-info').classList.remove('hidden');
-            document.getElementById('pause-room-info').classList.remove('hidden');
-            document.getElementById('host-settings-area').classList.remove('hidden');
-            showScreen('setup-screen');
-            showToast('房間創建成功！', true);
-        });
+    peer.on('open', (id) => {
+        myPeerId = id; isHost = true;
+        document.getElementById('setup-title').innerText = '多人大廳 (主機)';
+        document.getElementById('display-room-id').value = id;
+        document.getElementById('pause-display-room-id').innerText = id;
+        document.getElementById('room-info').classList.remove('hidden');
+        document.getElementById('pause-room-info').classList.remove('hidden');
+        document.getElementById('host-settings-area').classList.remove('hidden');
+        showScreen('setup-screen');
+        showToast('房間創建成功！', true);
+    });
 
-        peer.on('error', (err) => {
-            if (err.type === 'unavailable-id') initHost();
-            else showToast('連線錯誤: ' + err.type);
-        });
+    peer.on('error', (err) => {
+        if (err.type === 'unavailable-id') initHost();
+        else showToast('連線錯誤: ' + err.type);
+    });
 
-        peer.on('connection', (c) => {
-            c.on('open', () => {
-                connections[c.peer] = c;
-                showToast(`新玩家連線中...`);
-                c.send({ type: 'lobby_sync', settings: getFormSettings() });
-            });
-            c.on('data', (data) => handleNetworkData(c.peer, data));
-            c.on('close', () => handlePlayerDisconnect(c.peer));
+    peer.on('connection', (c) => {
+        c.on('open', () => {
+            connections[c.peer] = c;
+            showToast(`新玩家連線中...`);
+            c.send({ type: 'lobby_sync', settings: getFormSettings() });
         });
-    } catch(e) {
-        console.error(e);
-        showToast('環境限制導致無法建立連線，請匯出至本地端執行。');
-    }
+        c.on('data', (data) => handleNetworkData(c.peer, data));
+        c.on('close', () => handlePlayerDisconnect(c.peer));
+    });
 }
 
 function initClient() {
     const targetId = document.getElementById('join-room-id').value.trim();
     if (!targetId) return showToast('請輸入房號！');
     showToast('連線至房間: ' + targetId);
-    
-    try {
-        peer = new Peer();
+    peer = new Peer();
 
-        peer.on('open', (id) => {
-            myPeerId = id; isHost = false;
-            conn = peer.connect(targetId);
+    peer.on('open', (id) => {
+        myPeerId = id; isHost = false;
+        conn = peer.connect(targetId);
 
-            conn.on('open', () => {
-                showToast('成功連接至主機！', true);
-                document.getElementById('pause-display-room-id').innerText = targetId;
-                document.getElementById('pause-room-info').classList.remove('hidden');
-                showScreen('client-lobby');
-            });
-            conn.on('data', (data) => handleNetworkData(targetId, data));
-            conn.on('close', () => { showToast('與主機連線中斷'); leaveRoom(); });
+        conn.on('open', () => {
+            showToast('成功連接至主機！', true);
+            document.getElementById('pause-display-room-id').innerText = targetId;
+            document.getElementById('pause-room-info').classList.remove('hidden');
+            showScreen('client-lobby');
         });
-        peer.on('error', (err) => showToast('無法連接至該房間，請確認代碼'));
-    } catch(e) {
-        console.error(e);
-        showToast('環境限制導致無法建立連線，請匯出至本地端執行。');
-    }
+        conn.on('data', (data) => handleNetworkData(targetId, data));
+        conn.on('close', () => { showToast('與主機連線中斷'); leaveRoom(); });
+    });
+    peer.on('error', (err) => showToast('無法連接至該房間，請確認代碼'));
 }
 
 function leaveRoom() {
@@ -716,15 +703,6 @@ function getFormSettings() {
 }
 
 function handleNetworkData(senderPeerId, data) {
-    // 身為主機，負責轉發關鍵戰鬥事件給其他所有客戶端
-    if (isHost && (data.type === 'trigger_damage' || data.type === 'trigger_heal' || data.type === 'player_killed')) {
-        for (let key in connections) {
-            if (key !== senderPeerId && connections[key] && connections[key].open) {
-                connections[key].send(data);
-            }
-        }
-    }
-
     if (data.type === 'lobby_sync') {
         GAME_SETTINGS = data.settings; syncUISettings(GAME_SETTINGS);
     } 
@@ -746,24 +724,6 @@ function handleNetworkData(senderPeerId, data) {
                 else players[item.id].name = item.name;
             }
         });
-    }
-    else if (data.type === 'client_sync') {
-        // 主機接收客戶端的同步狀態並更新
-        if (isHost) {
-            const pData = data.player;
-            let p = players[pData.id];
-            if (!p) p = spawnRemotePlayer(pData.id, pData.name);
-            p.mesh.position.set(pData.x, pData.y, pData.z);
-            p.mesh.rotation.y = pData.ry;
-            p.bodyColorIndex = pData.bodyColor;
-            p.lightColorIndex = pData.lightColor;
-            p.isLightOn = pData.isLightOn;
-            p.isLightFocus = pData.isLightFocus;
-            p.pitch = pData.pitch || 0;
-            p.hp = pData.hp; p.kills = pData.kills; p.deaths = pData.deaths;
-            p.capsuleMesh.material.color.setHex(COLORS[pData.bodyColor].hex);
-            updateRemoteLightCone(p);
-        }
     }
     else if (data.type === 'sync_players') {
         data.players.forEach(pData => {
@@ -1468,7 +1428,7 @@ function updateNetworkSync() {
             });
         }
         broadcast({ type: 'sync_players', players: playersState });
-    } else broadcast({ type: 'client_sync', player: myData });
+    } else broadcast(myData);
 }
 
 function updateCameraFollow() {
