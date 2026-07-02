@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>光束競技場 3D (Light Arena)</title>
+    <title>RGB BATTLE 3D</title>
     <style>
         :root {
             --bg-color: #050914;
@@ -297,6 +297,18 @@
 </head>
 <body>
 
+    <!-- 設定確認覆蓋層 (置於最外層以防被截斷) -->
+    <div id="settings-confirm-dialog" style="position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(2,6,23,0.85); display:flex; flex-direction:column; justify-content:center; align-items:center; z-index:9999; opacity:0; pointer-events:none; transition: opacity 0.3s;">
+        <div style="text-align:center; padding:20px;">
+            <h3 style="color:#f59e0b; font-size:1.5rem; margin-bottom:10px;">確定要創建房間嗎？</h3>
+            <p style="color:#cbd5e1; font-size:1rem; margin-bottom:20px;">確定後將無法更改地圖與數值設定。</p>
+            <div style="display:flex; gap:10px;">
+                <button class="btn btn-danger" onclick="hideSettingsConfirm()">取消</button>
+                <button class="btn btn-success" onclick="confirmAndCreateRoom()">確定</button>
+            </div>
+        </div>
+    </div>
+
     <div id="toast-container"></div>
 
     <!-- 主選單 -->
@@ -350,12 +362,27 @@
                 <input type="text" id="display-room-id" readonly style="cursor: pointer; font-size: 1.5rem; font-weight: bold; color: var(--primary-color); letter-spacing: 2px; margin-bottom: 0;" onclick="copyRoomId(false)">
             </div>
 
-            <div class="menu-card">
+            <div class="menu-card hidden">
                 <div class="control-label">玩家暱稱</div>
                 <input type="text" id="player-name" value="神秘玩家" style="margin-bottom: 0;">
             </div>
 
             <div id="host-settings-area" class="settings-grid">
+                <div class="control-label" style="margin-bottom: 5px;">
+                    <span>全域操作反向</span>
+                    <input type="checkbox" id="set-reverse" style="width: 20px; height: 20px; accent-color: var(--primary-color);">
+                </div>
+                
+                <div class="control-label" style="margin-bottom: 5px;">
+                    <span>顯示暱稱</span>
+                    <input type="checkbox" id="set-showname" checked style="width: 20px; height: 20px; accent-color: var(--primary-color);">
+                </div>
+                
+                <div class="control-label" style="margin-bottom: 20px;">
+                    <span>顯示血條</span>
+                    <input type="checkbox" id="set-hpbar" checked style="width: 20px; height: 20px; accent-color: var(--primary-color);">
+                </div>
+
             <div class="control-label"><span>時間限制 (分鐘)</span><span id="val-time">5</span></div>
             <input type="range" id="set-time" min="1" max="60" value="5" oninput="updateVal('set-time','val-time')">
 
@@ -367,11 +394,6 @@
 
             <div class="control-label"><span>人物比例 (倍)</span><span id="val-psize">1.0</span></div>
             <input type="range" id="set-psize" min="0.5" max="5.0" step="0.1" value="1.0" oninput="updateVal('set-psize','val-psize')">
-
-            <div class="control-label">
-                <span>血條常駐顯示</span>
-                <input type="checkbox" id="set-hpbar" checked style="width: 20px; height: 20px; accent-color: var(--primary-color);">
-            </div>
 
                 <div class="control-label" style="margin-top: 10px;"><span>尖刺數量</span><span id="val-spike-c">15</span></div>
                 <input type="range" id="set-spike-c" min="0" max="200" value="15" oninput="updateVal('set-spike-c','val-spike-c')">
@@ -387,40 +409,118 @@
 
                 <div class="control-label"><span>加速帶冷卻 (幀)</span><span id="val-pad-cd">90</span></div>
                 <input type="range" id="set-pad-cd" min="0" max="300" value="90" oninput="updateVal('set-pad-cd','val-pad-cd')">
+                
+                <div class="control-label"><span>尖刺擊退</span><span id="val-spike-kb">50</span></div>
+                <input type="range" id="set-spike-kb" min="0" max="100" value="50" oninput="updateVal('set-spike-kb','val-spike-kb')">
+                
+                <div class="control-label"><span>基礎移動速度</span><span id="val-speed-b">45</span></div>
+                <input type="range" id="set-speed-b" min="1" max="100" value="45" oninput="updateVal('set-speed-b','val-speed-b')">
+                
+                <div class="control-label"><span>跑步速度(倍)</span><span id="val-speed-m">1.5</span></div>
+                <input type="range" id="set-speed-m" min="1" max="10" step="0.1" value="1.5" oninput="updateVal('set-speed-m','val-speed-m')">
+                
+                <div class="control-label"><span>跳躍高度</span><span id="val-jump">40</span></div>
+                <input type="range" id="set-jump" min="0" max="100" value="40" oninput="updateVal('set-jump','val-jump')">
+                
+                <div class="control-label"><span>重力</span><span id="val-grav">100</span></div>
+                <input type="range" id="set-grav" min="0" max="300" value="100" oninput="updateVal('set-grav','val-grav')">
+                
+                <div class="control-label"><span>摩擦力 (小=滑,大=黏)</span><span id="val-fric">50</span></div>
+                <input type="range" id="set-fric" min="0" max="100" value="50" oninput="updateVal('set-fric','val-fric')">
+                
+                <div class="control-label"><span>燈光回血(%)</span><span id="val-heal-l">5</span></div>
+                <input type="range" id="set-heal-l" min="0" max="100" value="5" oninput="updateVal('set-heal-l','val-heal-l')">
+                
+                <div class="control-label"><span>燈光扣血(%)</span><span id="val-dmg-l">5</span></div>
+                <input type="range" id="set-dmg-l" min="0" max="100" value="5" oninput="updateVal('set-dmg-l','val-dmg-l')">
+                
+                <div class="control-label"><span>聚光回血(%)</span><span id="val-heal-f">10</span></div>
+                <input type="range" id="set-heal-f" min="0" max="100" value="10" oninput="updateVal('set-heal-f','val-heal-f')">
+                
+                <div class="control-label"><span>聚光扣血(%)</span><span id="val-dmg-f">10</span></div>
+                <input type="range" id="set-dmg-f" min="0" max="100" value="10" oninput="updateVal('set-dmg-f','val-dmg-f')">
+                
+                <div class="control-label"><span>燈光觸發延遲(秒)</span><span id="val-light-delay">0</span></div>
+                <input type="range" id="set-light-delay" min="0" max="10" step="0.1" value="0" oninput="updateVal('set-light-delay','val-light-delay')">
             </div>
 
-            <div class="menu-card" style="margin-top: 15px; background: rgba(0,0,0,0.4);">
-                <h3 style="font-size: 1rem; margin-bottom: 5px; color: #cbd5e1;">操作說明</h3>
-                <p style="font-size: 0.85rem; margin-bottom: 0;">
-                    移動：<kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> | 衝刺：按住 <kbd>Shift</kbd><br>
-                    變色：<kbd>Q</kbd> (紅/綠/藍) | 燈光切換：<kbd>E</kbd><br>
-                    開燈：按住 <kbd>左鍵</kbd> (廣角) 或 <kbd>右鍵</kbd> (集束)<br>
-                    規則：照同色補血，異色扣血！加速帶提供純爆發推力！
-                </p>
-            </div>
+
 
             <div style="display: flex; gap: 10px; margin-top: 15px;">
-                <button class="btn btn-success" id="start-btn" onclick="startGame()">開始遊戲</button>
-                <button class="btn btn-danger" onclick="cancelSetup()">取消</button>
+                <button id="btn-setup-action" class="btn btn-success" onclick="showSettingsConfirm()">創建並進入</button>
+                <button id="btn-setup-back" class="btn btn-danger" onclick="showScreen('how-to-play-panel')">返回</button>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- 玩法介紹 -->
+    <div id="how-to-play-panel" class="ui-layer hidden">
+        <div class="panel">
+            <h1 class="game-title" style="font-size: 2.2rem;">玩法介紹</h1>
+            <div class="game-subtitle">How to Play</div>
+            
+            <div class="menu-card" style="border-color: rgba(56, 189, 248, 0.3);">
+                <h3 style="color: #38bdf8; text-align: left;">🎯 遊戲目標</h3>
+                <p>使用光線攻擊對手，將對手血量歸零以獲取擊殺分數！</p>
+                <hr style="border: none; border-top: 1px solid rgba(255,255,255,0.1); margin: 10px 0;">
+                <h3 style="color: #10b981; text-align: left;">⌨️ 基本操作</h3>
+                <p style="margin-bottom: 5px; color: #cbd5e1;">移動：<kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> | 跳躍：<kbd>空白鍵</kbd> | 衝刺：<kbd>Shift</kbd></p>
+                <hr style="border: none; border-top: 1px solid rgba(255,255,255,0.1); margin: 10px 0;">
+                <h3 style="color: #f59e0b; text-align: left;">🔦 光影戰鬥</h3>
+                <ul style="color: #94a3b8; font-size: 0.9rem; padding-left: 20px; margin-bottom: 0;">
+                    <li>[左鍵長按] 手電筒：範圍廣、傷害低</li>
+                    <li>[右鍵長按] 聚光燈：範圍窄、傷害高</li>
+                    <li>[Q 鍵] 切換自身顏色 | [E 鍵] 切換光線顏色</li>
+                    <li style="color: #ef4444; font-weight: bold; margin-top: 5px;">注意：當「光線顏色」與「目標顏色」相同時，會變成補血效果！</li>
+                </ul>
+            </div>
+
+            <div style="display: flex; flex-direction: column; gap: 10px; margin-top: 15px;">
+                <button class="btn btn-primary" id="btn-htp-action">下一步</button>
+                <button class="btn btn-danger" onclick="showScreen('main-menu')">返回主選單</button>
             </div>
         </div>
     </div>
 
-    <!-- 客戶端等待大廳 -->
-    <div id="client-lobby" class="ui-layer hidden">
+    <!-- 遊戲大廳 -->
+    <div id="game-lobby-panel" class="ui-layer hidden">
         <div class="panel">
-            <h1 class="game-title" style="font-size: 2.2rem;">已加入房間</h1>
-            <div class="game-subtitle">Waiting for Host</div>
+            <h1 class="game-title" style="font-size: 2.2rem;">遊戲大廳</h1>
+            <div class="game-subtitle">Game Lobby</div>
             
-            <div class="menu-card">
-                <div class="control-label">您的名稱</div>
-                <input type="text" id="client-player-name" value="玩家B" style="margin-bottom: 0;">
+            <div class="menu-card" style="display: flex; justify-content: space-between; align-items: center; padding: 15px 20px;">
+                <span style="color: #cbd5e1; font-weight: bold;">房間代碼:</span>
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <span id="lobby-room-code" style="font-family: monospace; font-size: 1.3rem; color: #38bdf8; font-weight: bold; letter-spacing: 2px;">------</span>
+                    <button class="btn btn-secondary" style="padding: 5px 10px; margin: 0; font-size: 0.8rem; width: auto;" onclick="copyLobbyRoomId()">複製</button>
+                </div>
             </div>
-            
-            <div class="loader"></div>
-            <p style="color: #cbd5e0; text-align: center; margin-bottom: 20px;">正在等待主機設定遊戲規則並啟動...</p>
-            
-            <button class="btn btn-danger" onclick="leaveRoom()">離開房間</button>
+
+            <div class="menu-card" style="padding: 15px 20px;">
+                <div class="control-label">玩家暱稱</div>
+                <div style="display: flex; gap: 10px;">
+                    <input type="text" id="lobby-player-name" style="margin-bottom: 0; flex: 1;">
+                    <button class="btn btn-primary" onclick="updatePlayerName()" style="width: auto; margin-bottom: 0; padding: 0 20px;">儲存</button>
+                </div>
+            </div>
+
+            <div class="menu-card" style="padding: 15px 20px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                    <span style="color: #38bdf8; font-weight: bold; font-size: 0.9rem;">玩家列表</span>
+                    <span style="color: #94a3b8; font-size: 0.8rem;"><span id="lobby-player-count">1</span> 人</span>
+                </div>
+                <div style="background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.05); border-radius: 12px; padding: 10px; height: 180px; overflow-y: auto;">
+                    <ul id="lobby-player-list" style="list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 8px;">
+                        <!-- JS 產生玩家項目 -->
+                    </ul>
+                </div>
+            </div>
+
+            <div style="display: flex; flex-direction: column; gap: 10px; margin-top: 15px;">
+                <button class="btn btn-success hidden" id="btn-lobby-start" onclick="hostStartGame()">開始遊戲</button>
+                <button class="btn btn-secondary hidden" id="btn-lobby-ready" onclick="toggleReady()">未準備</button>
+            </div>
         </div>
     </div>
 
@@ -499,17 +599,30 @@ let GAME_SETTINGS = {
     npcCount: 5,
     playerSize: 1.0,
     hpBarPersistent: true,
+    showName: true,
     spikeCount: 15,
     spikeDamage: 20,
     padCount: 10,
     padPush: 6,
-    padCooldown: 90
+    padCooldown: 90,
+    spikeKnockback: 50,
+    baseSpeed: 45,
+    sprintMultiplier: 1.5,
+    jumpHeight: 40,
+    gravity: 100,
+    friction: 50,
+    lightHeal: 5,
+    lightDmg: 5,
+    focusHeal: 10,
+    focusDmg: 10,
+    lightDelay: 0,
+    reverseControls: false
 };
 
 const COLORS = [
-    { name: '紅', hex: 0xef4444, rgb: [0.93, 0.26, 0.26] },
-    { name: '綠', hex: 0x10b981, rgb: [0.06, 0.72, 0.5] },
-    { name: '藍', hex: 0x3b82f6, rgb: [0.23, 0.5, 0.96] }
+    { name: '紅', hex: 0xff0000, rgb: [1.0, 0.0, 0.0] },
+    { name: '綠', hex: 0x00ff00, rgb: [0.0, 1.0, 0.0] },
+    { name: '藍', hex: 0x0044ff, rgb: [0.0, 0.26, 1.0] }
 ];
 
 function showScreen(id) {
@@ -597,7 +710,7 @@ function playSound(type) {
 }
 
 /* ==========================================
-   PeerJS 網路通訊架構
+   PeerJS 網路通訊架構 & 聯網中繼修正
 ========================================== */
 function selectMode(mode) {
     initAudio();
@@ -608,6 +721,11 @@ function selectMode(mode) {
         document.getElementById('host-settings-area').classList.remove('hidden');
         document.getElementById('npc-count-setting').style.display = 'flex';
         document.getElementById('set-npc').style.display = 'block';
+        
+        document.getElementById('btn-setup-action').innerText = '開始遊戲';
+        document.getElementById('btn-setup-action').onclick = startGame;
+        document.getElementById('btn-setup-back').onclick = () => showScreen('main-menu');
+        
         showScreen('setup-screen');
     } else {
         isMultiplayer = true;
@@ -626,33 +744,64 @@ function generateRandomRoomId() {
     return Math.floor(100000 + Math.random() * 900000).toString();
 }
 
+let lobbyPlayers = {};
+
 function initHost() {
+    isHost = true;
+    localPlayerName = '玩家_' + Math.floor(Math.random()*1000);
+    showScreen('how-to-play-panel');
+    document.getElementById('btn-htp-action').innerText = '地圖設定';
+    document.getElementById('btn-htp-action').onclick = () => {
+        document.getElementById('setup-title').innerText = '遊戲設定';
+        document.getElementById('host-settings-area').classList.remove('hidden');
+        
+        document.getElementById('btn-setup-action').innerText = '創建並進入';
+        document.getElementById('btn-setup-action').onclick = showSettingsConfirm;
+        document.getElementById('btn-setup-back').onclick = () => showScreen('how-to-play-panel');
+        
+        showScreen('setup-screen');
+    };
+}
+
+function showSettingsConfirm() {
+    document.getElementById('settings-confirm-dialog').style.opacity = '1';
+    document.getElementById('settings-confirm-dialog').style.pointerEvents = 'auto';
+}
+
+function hideSettingsConfirm() {
+    document.getElementById('settings-confirm-dialog').style.opacity = '0';
+    document.getElementById('settings-confirm-dialog').style.pointerEvents = 'none';
+}
+
+function confirmAndCreateRoom() {
+    hideSettingsConfirm();
     showToast('正在向伺服器申請房號...');
     const targetRoomId = generateRandomRoomId();
     peer = new Peer(targetRoomId);
 
     peer.on('open', (id) => {
         myPeerId = id; isHost = true;
-        document.getElementById('setup-title').innerText = '多人大廳 (主機)';
-        document.getElementById('display-room-id').value = id;
+        
+        lobbyPlayers[myPeerId] = { name: localPlayerName, ready: true, host: true };
+        document.getElementById('lobby-player-name').value = localPlayerName;
+        
         document.getElementById('pause-display-room-id').innerText = id;
-        document.getElementById('room-info').classList.remove('hidden');
         document.getElementById('pause-room-info').classList.remove('hidden');
-        document.getElementById('host-settings-area').classList.remove('hidden');
-        showScreen('setup-screen');
+        document.getElementById('lobby-room-code').innerText = id;
+        
+        renderLobby();
+        showScreen('game-lobby-panel');
         showToast('房間創建成功！', true);
     });
 
     peer.on('error', (err) => {
-        if (err.type === 'unavailable-id') initHost();
+        if (err.type === 'unavailable-id') confirmAndCreateRoom();
         else showToast('連線錯誤: ' + err.type);
     });
 
     peer.on('connection', (c) => {
         c.on('open', () => {
             connections[c.peer] = c;
-            showToast(`新玩家連線中...`);
-            c.send({ type: 'lobby_sync', settings: getFormSettings() });
         });
         c.on('data', (data) => handleNetworkData(c.peer, data));
         c.on('close', () => handlePlayerDisconnect(c.peer));
@@ -670,10 +819,20 @@ function initClient() {
         conn = peer.connect(targetId);
 
         conn.on('open', () => {
-            showToast('成功連接至主機！', true);
+            localPlayerName = '玩家_' + Math.floor(Math.random()*1000);
+            document.getElementById('lobby-player-name').value = localPlayerName;
+            
             document.getElementById('pause-display-room-id').innerText = targetId;
             document.getElementById('pause-room-info').classList.remove('hidden');
-            showScreen('client-lobby');
+            document.getElementById('lobby-room-code').innerText = targetId;
+            
+            conn.send({ type: 'lobby_join', name: localPlayerName });
+            
+            showScreen('how-to-play-panel');
+            document.getElementById('btn-htp-action').innerText = '進入大廳';
+            document.getElementById('btn-htp-action').onclick = () => {
+                showScreen('game-lobby-panel');
+            };
         });
         conn.on('data', (data) => handleNetworkData(targetId, data));
         conn.on('close', () => { showToast('與主機連線中斷'); leaveRoom(); });
@@ -683,8 +842,165 @@ function initClient() {
 
 function leaveRoom() {
     if (peer) { peer.destroy(); peer = null; }
-    conn = null; connections = {};
+    conn = null; connections = {}; lobbyPlayers = {};
     showScreen('main-menu');
+}
+
+function broadcastLobby() {
+    broadcast({ type: 'lobby_update', players: lobbyPlayers });
+    renderLobby();
+}
+
+function renderLobby() {
+    const list = document.getElementById('lobby-player-list');
+    list.innerHTML = '';
+    
+    let allReady = true;
+    let pCount = 0;
+    
+    for(let id in lobbyPlayers) {
+        pCount++;
+        const p = lobbyPlayers[id];
+        const isMe = id === myPeerId;
+        const isP_Host = p.host;
+        
+        if(!p.ready && !isP_Host) allReady = false;
+        
+        const li = document.createElement('li');
+        li.style.cssText = 'display: flex; justify-content: space-between; align-items: center; background: rgba(15, 23, 42, 0.6); padding: 8px 12px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.05);';
+        
+        let nameHtml = `<span style="color: ${isMe ? '#38bdf8' : '#cbd5e1'}; font-weight: bold;">${p.name} ${isP_Host ? '👑' : ''}</span>`;
+        
+        let statusHtml = '';
+        if (isP_Host) {
+            statusHtml = `<span style="font-size: 0.75rem; background: rgba(16, 185, 129, 0.2); color: #34d399; border: 1px solid rgba(52, 211, 153, 0.3); padding: 2px 6px; border-radius: 4px; font-weight: bold;">房主</span>`;
+        } else {
+            if (p.ready) {
+                statusHtml = `<span style="font-size: 0.75rem; background: rgba(16, 185, 129, 0.2); color: #34d399; border: 1px solid rgba(52, 211, 153, 0.3); padding: 2px 6px; border-radius: 4px; font-weight: bold;">已準備</span>`;
+            } else {
+                statusHtml = `<span style="font-size: 0.75rem; background: rgba(148, 163, 184, 0.2); color: #94a3b8; border: 1px solid rgba(148, 163, 184, 0.3); padding: 2px 6px; border-radius: 4px; font-weight: bold;">未準備</span>`;
+            }
+        }
+        
+        let kickHtml = '';
+        if (isHost && !isP_Host) {
+            kickHtml = `<button style="background: none; border: none; color: #ef4444; font-size: 1rem; cursor: pointer; padding: 0 5px;" onclick="kickPlayer('${id}')">✖</button>`;
+        }
+        
+        li.innerHTML = `
+            <div style="display: flex; align-items: center; gap: 8px;">${nameHtml}</div>
+            <div style="display: flex; align-items: center; gap: 8px;">${statusHtml} ${kickHtml}</div>
+        `;
+        list.appendChild(li);
+    }
+    
+    document.getElementById('lobby-player-count').innerText = pCount;
+    
+    const btnStart = document.getElementById('btn-lobby-start');
+    const btnReady = document.getElementById('btn-lobby-ready');
+    
+    if (isHost) {
+        btnStart.classList.remove('hidden');
+        btnReady.classList.add('hidden');
+        
+        if (allReady && pCount >= 1) { 
+            btnStart.className = 'btn btn-success';
+            btnStart.style.background = '';
+            btnStart.style.boxShadow = '';
+            btnStart.disabled = false;
+        } else {
+            btnStart.className = 'btn btn-secondary';
+            btnStart.style.background = '#334155';
+            btnStart.style.boxShadow = 'none';
+            btnStart.disabled = true;
+        }
+    } else {
+        btnStart.classList.add('hidden');
+        btnReady.classList.remove('hidden');
+        
+        const me = lobbyPlayers[myPeerId];
+        if (me && me.ready) {
+            btnReady.innerText = '取消準備';
+            btnReady.className = 'btn btn-success';
+        } else {
+            btnReady.innerText = '未準備';
+            btnReady.className = 'btn btn-danger';
+            btnReady.style.background = 'linear-gradient(135deg, #d97706 0%, #f59e0b 100%)';
+            btnReady.style.boxShadow = '0 6px 20px rgba(245, 158, 11, 0.3)';
+        }
+    }
+}
+
+function kickPlayer(id) {
+    if (!isHost) return;
+    const c = connections[id];
+    if (c) {
+        c.send({ type: 'kicked' });
+        setTimeout(() => {
+            c.close();
+            delete connections[id];
+            delete lobbyPlayers[id];
+            broadcastLobby();
+        }, 100);
+    }
+}
+
+function toggleReady() {
+    const me = lobbyPlayers[myPeerId];
+    if (!me) return;
+    me.ready = !me.ready;
+    if (conn) conn.send({ type: 'toggle_ready', state: me.ready });
+    renderLobby(); // Optimistic update
+}
+
+function updatePlayerName() {
+    const newName = document.getElementById('lobby-player-name').value.trim();
+    if (!newName) return showToast('請輸入有效暱稱！');
+
+    if (isHost) {
+        if (checkNameExists(newName, myPeerId)) {
+            return showToast('此名稱已被使用，請換一個！');
+        }
+        localPlayerName = newName;
+        lobbyPlayers[myPeerId].name = newName;
+        broadcastLobby();
+        showToast('名稱修改成功！', true);
+    } else {
+        if (conn && conn.open) {
+            conn.send({ type: 'request_name_change', name: newName });
+        }
+    }
+}
+
+function checkNameExists(name, ignoreId) {
+    for (let id in lobbyPlayers) {
+        if (id !== ignoreId && lobbyPlayers[id].name === name) return true;
+    }
+    return false;
+}
+
+window.copyLobbyRoomId = function() {
+    const code = document.getElementById('lobby-room-code').innerText;
+    const tempInput = document.createElement('input');
+    tempInput.value = code;
+    document.body.appendChild(tempInput);
+    tempInput.select();
+    document.execCommand('copy');
+    document.body.removeChild(tempInput);
+    showToast('已複製房間代碼！', true);
+};
+
+function hostStartGame() {
+    GAME_SETTINGS = getFormSettings();
+    const seed = Math.floor(Math.random() * 1000000);
+    remoteObstaclesSeed = seed;
+    broadcast({ type: 'game_start', settings: GAME_SETTINGS, obstaclesSeed: seed });
+    
+    buildWorldAndStart();
+    // Convert lobbyPlayers to active players
+    for (let id in lobbyPlayers) {
+        if (id !== myPeerId) spawnRemotePlayer(id, lobbyPlayers[id].name);
+    }
 }
 
 function getFormSettings() {
@@ -694,23 +1010,75 @@ function getFormSettings() {
         npcCount: parseInt(document.getElementById('set-npc').value),
         playerSize: parseFloat(document.getElementById('set-psize').value),
         hpBarPersistent: document.getElementById('set-hpbar').checked,
+        showName: document.getElementById('set-showname').checked,
         spikeCount: parseInt(document.getElementById('set-spike-c').value),
         spikeDamage: parseInt(document.getElementById('set-spike-d').value),
         padCount: parseInt(document.getElementById('set-pad-c').value),
         padPush: parseFloat(document.getElementById('set-pad-p').value),
-        padCooldown: parseInt(document.getElementById('set-pad-cd').value)
+        padCooldown: parseInt(document.getElementById('set-pad-cd').value),
+        spikeKnockback: parseInt(document.getElementById('set-spike-kb').value),
+        baseSpeed: parseInt(document.getElementById('set-speed-b').value),
+        sprintMultiplier: parseFloat(document.getElementById('set-speed-m').value),
+        jumpHeight: parseInt(document.getElementById('set-jump').value),
+        gravity: parseInt(document.getElementById('set-grav').value),
+        friction: parseInt(document.getElementById('set-fric').value),
+        lightHeal: parseInt(document.getElementById('set-heal-l').value),
+        lightDmg: parseInt(document.getElementById('set-dmg-l').value),
+        focusHeal: parseInt(document.getElementById('set-heal-f').value),
+        focusDmg: parseInt(document.getElementById('set-dmg-f').value),
+        lightDelay: parseFloat(document.getElementById('set-light-delay').value),
+        reverseControls: document.getElementById('set-reverse').checked
     };
 }
 
+/* ==============================================================
+   核心修正：封包接收解析與 Host 連線封包中繼轉發
+============================================================== */
 function handleNetworkData(senderPeerId, data) {
-    if (data.type === 'lobby_sync') {
-        GAME_SETTINGS = data.settings; syncUISettings(GAME_SETTINGS);
-    } 
-    else if (data.type === 'game_start') {
+    if (data.type === 'lobby_join') {
+        let requestedName = data.name;
+        while (checkNameExists(requestedName, senderPeerId)) {
+            requestedName += '_' + Math.floor(Math.random()*100);
+        }
+        lobbyPlayers[senderPeerId] = { name: requestedName, ready: false, host: false };
+        connections[senderPeerId].send({ type: 'name_accepted', name: requestedName });
+        broadcastLobby();
+    } else if (data.type === 'request_name_change') {
+        if (isHost) {
+            if (checkNameExists(data.name, senderPeerId)) {
+                connections[senderPeerId].send({ type: 'name_rejected', reason: '此名稱已被使用，請換一個！' });
+            } else {
+                lobbyPlayers[senderPeerId].name = data.name;
+                broadcastLobby();
+                connections[senderPeerId].send({ type: 'name_accepted', name: data.name });
+            }
+        }
+    } else if (data.type === 'name_rejected') {
+        showToast(data.reason);
+        document.getElementById('lobby-player-name').value = localPlayerName; // reset to valid name
+    } else if (data.type === 'name_accepted') {
+        localPlayerName = data.name;
+        document.getElementById('lobby-player-name').value = localPlayerName;
+        showToast('名稱已更新！', true);
+    } else if (data.type === 'toggle_ready') {
+        if(lobbyPlayers[senderPeerId]) {
+            lobbyPlayers[senderPeerId].ready = data.state;
+            broadcastLobby();
+        }
+    } else if (data.type === 'lobby_update') {
+        lobbyPlayers = data.players;
+        renderLobby();
+    } else if (data.type === 'kicked') {
+        showToast('你已被房主踢出房間！');
+        leaveRoom();
+    } else if (data.type === 'game_start') {
         GAME_SETTINGS = data.settings; remoteObstaclesSeed = data.obstaclesSeed;
-        localPlayerName = document.getElementById('client-player-name').value.trim() || '玩家B';
-        conn.send({ type: 'register_name', name: localPlayerName });
+        
         buildWorldAndStart();
+        // Convert lobbyPlayers to active players
+        for (let id in lobbyPlayers) {
+            if (id !== myPeerId) spawnRemotePlayer(id, lobbyPlayers[id].name);
+        }
     }
     else if (data.type === 'register_name') {
         if (!players[senderPeerId]) spawnRemotePlayer(senderPeerId, data.name);
@@ -736,19 +1104,60 @@ function handleNetworkData(senderPeerId, data) {
                 p.lightColorIndex = pData.lightColor;
                 p.isLightOn = pData.isLightOn;
                 p.isLightFocus = pData.isLightFocus;
-                p.pitch = pData.pitch || 0; // 同步各玩家的垂直視角
+                p.pitch = pData.pitch || 0;
                 p.hp = pData.hp; p.kills = pData.kills; p.deaths = pData.deaths;
                 p.capsuleMesh.material.color.setHex(COLORS[pData.bodyColor].hex);
                 updateRemoteLightCone(p);
             }
         });
     }
-    else if (data.type === 'trigger_damage' && data.targetId === myPeerId) { damageLocalPlayer(data.amount, data.attackerId); }
-    else if (data.type === 'trigger_heal' && data.targetId === myPeerId) { healLocalPlayer(data.amount); }
-    else if (data.type === 'player_killed') { showToast(`💥 ${data.killerName} 消滅了 ${data.victimName}！`); playSound('kill'); }
+    // 解析來自其他客戶端的單一玩家狀態包，並寫入主機的 players 集合中
+    else if (data.type === 'player_update') {
+        let p = players[data.id];
+        if (!p) p = spawnRemotePlayer(data.id, data.name);
+        p.mesh.position.set(data.x, data.y, data.z);
+        p.mesh.rotation.y = data.ry;
+        p.bodyColorIndex = data.bodyColor;
+        p.lightColorIndex = data.lightColor;
+        p.isLightOn = data.isLightOn;
+        p.isLightFocus = data.isLightFocus;
+        p.pitch = data.pitch || 0;
+        p.hp = data.hp; p.kills = data.kills; p.deaths = data.deaths;
+        p.capsuleMesh.material.color.setHex(COLORS[data.bodyColor].hex);
+        updateRemoteLightCone(p);
+    }
+    // 修正：Host 中繼轉發傷害判定
+    else if (data.type === 'trigger_damage') {
+        if (data.targetId === myPeerId) { 
+            damageLocalPlayer(data.amount, data.attackerId); 
+        } else if (isHost) {
+            // 如果目標不是 Host 本身，且當前為 Host，將此扣血事件轉發至目標對應的 Client
+            const targetConn = connections[data.targetId];
+            if (targetConn && targetConn.open) {
+                targetConn.send(data);
+            }
+        }
+    }
+    // 修正：Host 中繼轉發治療判定
+    else if (data.type === 'trigger_heal') {
+        if (data.targetId === myPeerId) { 
+            healLocalPlayer(data.amount); 
+        } else if (isHost) {
+            // 將治療事件中繼轉發至對應客戶端
+            const targetConn = connections[data.targetId];
+            if (targetConn && targetConn.open) {
+                targetConn.send(data);
+            }
+        }
+    }
+    else if (data.type === 'player_killed') { 
+        showToast(`💥 ${data.killerName} 消滅了 ${data.victimName}！`); 
+        playSound('kill'); 
+    }
 }
 
 function handlePlayerDisconnect(peerId) {
+    if (lobbyPlayers[peerId]) { delete lobbyPlayers[peerId]; broadcastLobby(); }
     if (players[peerId]) { scene.remove(players[peerId].mesh); delete players[peerId]; showToast('一名玩家離開了'); }
 }
 
@@ -814,11 +1223,7 @@ function createCapsule(radius, height, colorHex) {
 function startGame() {
     if (isMultiplayer && !isHost) return;
     GAME_SETTINGS = getFormSettings();
-    localPlayerName = document.getElementById('player-name').value.trim() || '主機玩家';
-    if (isMultiplayer && isHost) {
-        remoteObstaclesSeed = Math.random();
-        broadcast({ type: 'game_start', settings: GAME_SETTINGS, obstaclesSeed: remoteObstaclesSeed });
-    }
+    localPlayerName = '我';
     buildWorldAndStart();
 }
 
@@ -826,8 +1231,8 @@ function buildWorldAndStart() {
     showScreen(null); document.getElementById('hud').style.display = 'block';
     document.getElementById('instruction').classList.remove('hidden');
 
-    scene = new THREE.Scene(); scene.background = new THREE.Color(0x050914);
-    scene.fog = new THREE.Fog(0x050914, 200, Math.max(1500, GAME_SETTINGS.mapSize * 1.5));
+    scene = new THREE.Scene(); scene.background = new THREE.Color(0x020202);
+    scene.fog = new THREE.FogExp2(0x020202, 0.003);
 
     camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.1, 5000);
     renderer = new THREE.WebGLRenderer({ antialias: true }); renderer.setSize(window.innerWidth, window.innerHeight);
@@ -837,14 +1242,7 @@ function buildWorldAndStart() {
     document.body.appendChild(renderer.domElement);
     clock = new THREE.Clock();
 
-    const ambient = new THREE.AmbientLight(0x444444, 1.2); scene.add(ambient);
-    const hemiLight = new THREE.HemisphereLight(0xffffff, 0x444444, 0.6); hemiLight.position.set(0, 200, 0); scene.add(hemiLight);
-    const sun = new THREE.DirectionalLight(0xffffff, 1.0);
-    sun.position.set(200, 500, 100); sun.castShadow = true;
-    sun.shadow.mapSize.width = 2048; sun.shadow.mapSize.height = 2048;
-    const d = GAME_SETTINGS.mapSize;
-    sun.shadow.camera.left = -d; sun.shadow.camera.right = d; sun.shadow.camera.top = d; sun.shadow.camera.bottom = -d;
-    scene.add(sun);
+    const ambient = new THREE.AmbientLight(0x111116, 0.15); scene.add(ambient);
 
     // 地板 (正方形)
     const mapS = GAME_SETTINGS.mapSize;
@@ -869,7 +1267,10 @@ function buildWorldAndStart() {
     localPlayer.mesh = capObj.group; localPlayer.capsuleMesh = capObj.visualMesh;
     localPlayer.mesh.position.copy(getRandomSpawnPosition()); scene.add(localPlayer.mesh);
 
-    lightConeMesh = createLightConeVisual(); localPlayer.mesh.add(lightConeMesh);
+    const lightObj = createLightConeVisual(COLORS[localPlayer.lightColorIndex].hex, true); 
+    localPlayer.mesh.add(lightObj.group);
+    localPlayer.lightGroup = lightObj.group;
+    localPlayer.spotLight = lightObj.spotLight;
     players[myPeerId || 'local'] = localPlayer;
     
     // 單人模式生成 NPC
@@ -922,7 +1323,7 @@ function generateMapAssets() {
 
     const sGeo = new THREE.ConeGeometry(3, 10, 8);
     for (let i = 0; i < GAME_SETTINGS.spikeCount; i++) {
-        const mesh = new THREE.Mesh(sGeo, spikeMat);
+        const mesh = new THREE.Mesh(sGeo, spikeMat.clone());
         mesh.position.set((randomFunc()-0.5) * mapR * 1.6, 5, (randomFunc()-0.5) * mapR * 1.6);
         mesh.castShadow = true; mesh.receiveShadow = true; scene.add(mesh);
         spikes.push({ mesh: mesh, pos: mesh.position, radius: 3, height: 10 });
@@ -930,44 +1331,75 @@ function generateMapAssets() {
 
     const pGeo = new THREE.CylinderGeometry(12, 12, 0.5, 16);
     for (let i = 0; i < GAME_SETTINGS.padCount; i++) {
-        const mesh = new THREE.Mesh(pGeo, padMat);
+        const mesh = new THREE.Mesh(pGeo, padMat.clone());
         mesh.position.set((randomFunc()-0.5) * mapR * 1.6, 0.25, (randomFunc()-0.5) * mapR * 1.6);
         scene.add(mesh);
         pads.push({ mesh: mesh, pos: mesh.position, radius: 12, cooldowns: {} });
     }
 }
 
-function createLightConeVisual() {
-    const coneGeo = new THREE.ConeGeometry(1, 1, 16, 1, true); coneGeo.rotateX(Math.PI / 2); coneGeo.translate(0, 0, 0.5);
-    const mesh = new THREE.Mesh(coneGeo, new THREE.MeshBasicMaterial({
-        color: COLORS[localPlayer.lightColorIndex].hex, transparent: true, opacity: 0.0,
-        depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide
-    }));
-    mesh.position.set(0, localPlayer.height * 0.75, 0); return mesh;
+function createLightConeVisual(pColorHex, isLocal = false) {
+    const group = new THREE.Group();
+    const spotLight = new THREE.SpotLight(pColorHex, 0);
+    spotLight.angle = Math.PI / 4; 
+    spotLight.penumbra = 0.5;
+    spotLight.decay = 1.5;
+    spotLight.distance = 350;
+    
+    if (isLocal) {
+        spotLight.castShadow = true;
+        spotLight.shadow.mapSize.width = 1024;
+        spotLight.shadow.mapSize.height = 1024;
+        spotLight.shadow.camera.near = 5;
+        spotLight.shadow.camera.far = 350;
+        spotLight.shadow.bias = -0.001;
+    }
+    
+    const targetObj = new THREE.Object3D();
+    targetObj.position.set(0, 0, 100);
+    
+    group.add(spotLight);
+    group.add(targetObj);
+    spotLight.target = targetObj;
+    
+    // Y position should be eye level
+    group.position.set(0, 14.0 * GAME_SETTINGS.playerSize * 0.75, 0); 
+    return { group, spotLight };
 }
 
 function spawnRemotePlayer(id, name) {
     if (players[id]) return players[id];
     const rSize = 5.0 * GAME_SETTINGS.playerSize; const hSize = 14.0 * GAME_SETTINGS.playerSize;
-    const capObj = createCapsule(rSize, hSize, COLORS[0].hex); const pMesh = capObj.group; scene.add(pMesh);
-    const remoteLightCone = createLightConeVisual(); pMesh.add(remoteLightCone);
+    const pColor = COLORS[0].hex;
+    const capObj = createCapsule(rSize, hSize, pColor); const pMesh = capObj.group; scene.add(pMesh);
+    const lightObj = createLightConeVisual(pColor, false); pMesh.add(lightObj.group);
     
     players[id] = { 
         mesh: pMesh, capsuleMesh: capObj.visualMesh, name: name, hp: 100, kills: 0, deaths: 0, 
         bodyColorIndex: 0, lightColorIndex: 1, isLightOn: false, isLightFocus: false, 
-        lightCone: remoteLightCone, radius: rSize, height: hSize,
+        lightGroup: lightObj.group, spotLight: lightObj.spotLight, radius: rSize, height: hSize,
         velocity: new THREE.Vector3(), onGround: false, yRotation: 0, pitch: 0 
     };
     return players[id];
 }
 
 function updateRemoteLightCone(p) {
-    if (!p.lightCone) return;
-    if (!p.isLightOn) { p.lightCone.material.opacity = 0; return; }
-    p.lightCone.material.color.setHex(COLORS[p.lightColorIndex].hex);
-    if (p.isLightFocus) { p.lightCone.scale.set(3, 3, 180); p.lightCone.material.opacity = 0.55; } 
-    else { p.lightCone.scale.set(20, 20, 70); p.lightCone.material.opacity = 0.25; }
-    p.lightCone.rotation.set(p.pitch || 0, 0, 0); // 同步光束垂直傾斜
+    if (!p.lightGroup) return;
+    
+    p.lightGroup.rotation.set(p.pitch || 0, 0, 0);
+    
+    const targetColor = new THREE.Color(COLORS[p.lightColorIndex].hex);
+    p.spotLight.color.lerp(targetColor, 0.1);
+    
+    if (!p.isLightOn) { 
+        p.spotLight.intensity += (0 - p.spotLight.intensity) * 0.15;
+    } else {
+        const targetAngle = p.isLightFocus ? Math.PI / 10 : Math.PI / 4;
+        const targetIntensity = p.isLightFocus ? 250 : 100;
+        
+        p.spotLight.angle += (targetAngle - p.spotLight.angle) * 0.15;
+        p.spotLight.intensity += (targetIntensity - p.spotLight.intensity) * 0.15;
+    }
 }
 
 /* ==========================================
@@ -984,7 +1416,7 @@ function setupInputListeners() {
         }
         if (e.key === 'e' || e.key === 'E') {
             localPlayer.lightColorIndex = (localPlayer.lightColorIndex + 1) % 3;
-            lightConeMesh.material.color.setHex(COLORS[localPlayer.lightColorIndex].hex); playSound('heal');
+            playSound('heal');
         }
     });
     window.addEventListener('keyup', (e) => keys[e.key.toLowerCase()] = false);
@@ -1068,8 +1500,9 @@ function animate() {
         if (!isMultiplayer) updateBotsAI(dt); 
         updateLightBeamMechanics(dt);
         updateParticles(dt);
-        updateNetworkSync();
     }
+    updateNetworkSync();
+    
     updateCameraFollow(); updateHUDOverlay();
     renderer.render(scene, camera);
 }
@@ -1155,30 +1588,34 @@ function updateBotsAI(dt) {
 
 function updateLocalPlayerPhysics(dt) {
     const p = localPlayer;
-    if (!p.onGround) p.velocity.y -= 100.0 * dt; else p.velocity.y = Math.max(0, p.velocity.y);
+    if (!p.onGround) p.velocity.y -= GAME_SETTINGS.gravity * dt; else p.velocity.y = Math.max(0, p.velocity.y);
 
-    let speed = 45.0; if (keys['shift']) speed *= 1.5;
+    let speed = GAME_SETTINGS.baseSpeed; if (keys['shift']) speed *= GAME_SETTINGS.sprintMultiplier;
     let moveX = 0, moveZ = 0;
     if (keys['w']) moveZ += 1; if (keys['s']) moveZ -= 1;
     if (keys['a']) moveX += 1; if (keys['d']) moveX -= 1;
     
+    if (GAME_SETTINGS.reverseControls) { moveX = -moveX; moveZ = -moveZ; }
+    
     const direction = new THREE.Vector3(moveX, 0, moveZ).normalize().applyAxisAngle(new THREE.Vector3(0, 1, 0), p.yRotation);
     
     if (moveX === 0 && moveZ === 0) {
-        p.velocity.x *= 0.85;
-        p.velocity.z *= 0.85;
+        const idleDecay = 1.0 - (GAME_SETTINGS.friction / 100) * 0.3;
+        p.velocity.x *= idleDecay;
+        p.velocity.z *= idleDecay;
     } else {
         const currentSpeed = Math.hypot(p.velocity.x, p.velocity.z);
         if(currentSpeed <= speed) {
             p.velocity.x = direction.x * speed;
             p.velocity.z = direction.z * speed;
         } else {
-             p.velocity.x = p.velocity.x * 0.95 + direction.x * speed * 0.05;
-             p.velocity.z = p.velocity.z * 0.95 + direction.z * speed * 0.05;
+             const turnDecay = 1.0 - (GAME_SETTINGS.friction / 100) * 0.1;
+             p.velocity.x = p.velocity.x * turnDecay + direction.x * speed * (1.0 - turnDecay);
+             p.velocity.z = p.velocity.z * turnDecay + direction.z * speed * (1.0 - turnDecay);
         }
     }
 
-    if (keys[' '] && p.onGround) { p.velocity.y = 40.0; p.onGround = false; }
+    if (keys[' '] && p.onGround) { p.velocity.y = GAME_SETTINGS.jumpHeight; p.onGround = false; }
     p.mesh.position.addScaledVector(p.velocity, dt);
 
     if (p.mesh.position.y <= 0) {
@@ -1196,7 +1633,19 @@ function updateLocalPlayerPhysics(dt) {
         if (dx*dx + dz*dz < triggerDist * triggerDist && p.mesh.position.y < spike.height && p.mesh.position.y + p.height > 0) {
             if (!spike.cooldown) {
                 spike.cooldown = true; damageLocalPlayer((GAME_SETTINGS.spikeDamage/100)*100, "尖刺"); playSound('spike');
-                p.velocity.add(new THREE.Vector3(dx, 0, dz).normalize().multiplyScalar(60)); p.velocity.y = 30; p.onGround = false;
+                
+                const pushDir = new THREE.Vector3(dx, 0, dz);
+                if (pushDir.lengthSq() < 0.01) pushDir.set(1, 0, 0);
+                pushDir.normalize();
+                
+                const overlap = triggerDist - Math.hypot(dx, dz);
+                p.mesh.position.add(pushDir.clone().multiplyScalar(overlap + 1.5));
+                
+                p.velocity.x = pushDir.x * GAME_SETTINGS.spikeKnockback;
+                p.velocity.z = pushDir.z * GAME_SETTINGS.spikeKnockback;
+                p.velocity.y = 30; 
+                p.onGround = false;
+                
                 spike.mesh.material.emissive.setHex(0xffffff); setTimeout(() => { spike.mesh.material.emissive.setHex(0x000000); spike.cooldown = false; }, 1000);
             }
         }
@@ -1233,14 +1682,12 @@ function updateLocalPlayerPhysics(dt) {
    極精準 3D 膠囊體雷射交叉點碰撞檢測演算法 (解決中近距離打不中敵人血量的核心 Bug)
    ============================================================= */
 function checkBeamHit(shooter, target, isFocus) {
-    const maxRange = isFocus ? 180 : 70;
-    const angleThreshold = isFocus ? 0.08 : 0.45;
+    const angleThreshold = isFocus ? Math.PI / 10 : Math.PI / 4;
+    const maxRange = isFocus ? 280 : 120;
     
-    // 1. 強制更新發射者的世界矩陣，確保獲取當前影格最即時、精準的世界座標位置
     shooter.mesh.updateMatrixWorld(true);
     const eyePos = new THREE.Vector3(0, shooter.height * 0.75, 0).applyMatrix4(shooter.mesh.matrixWorld);
     
-    // 2. 融合垂直視角（Pitch）與水平旋轉（Rotation），計算出在 3D 空間中極度精確的光束發射方向向量
     const forward = new THREE.Vector3(0, 0, 1);
     if (shooter === localPlayer) {
         forward.applyAxisAngle(new THREE.Vector3(1, 0, 0), cameraPitch);
@@ -1253,23 +1700,19 @@ function checkBeamHit(shooter, target, isFocus) {
     }
     forward.normalize();
     
-    // 3. 取得目標玩家的位置參數
     const targetX = target.mesh.position.x;
     const targetY = target.mesh.position.y;
     const targetZ = target.mesh.position.z;
     
-    // 定義膠囊體內部中心線段的上下端點 y 軸
     const botY = targetY + target.radius;
     const topY = targetY + target.height - target.radius;
     
-    // 4. 連續取樣：在目標中心線上由下到上均勻採樣 5 個高度點，這能完美覆蓋腳底、腹部與頭部的高度範圍
     const numSamples = 5;
     for (let i = 0; i < numSamples; i++) {
         const t = i / (numSamples - 1);
         const sampleY = botY + t * (topY - botY);
         const targetPoint = new THREE.Vector3(targetX, sampleY, targetZ);
         
-        // 發射點指向當前採樣點的向量
         const toTarget = targetPoint.clone().sub(eyePos);
         const dist = toTarget.length();
         
@@ -1277,12 +1720,11 @@ function checkBeamHit(shooter, target, isFocus) {
             toTarget.normalize();
             const angle = forward.angleTo(toTarget);
             
-            // 5. 寬容度補償（Thickness Angle）：根據目標半徑與距離，動態增加膠囊體本身的寬度弧度，使中近距離更加容易命中
             const targetThicknessAngle = Math.atan(target.radius / Math.max(1.0, dist));
             const allowedAngle = angleThreshold + targetThicknessAngle;
             
             if (angle < allowedAngle) {
-                return true; // 採樣點有任何一個落入錐體範圍內，即判定成功命中！
+                return true; 
             }
         }
     }
@@ -1293,24 +1735,27 @@ function updateLightBeamMechanics(dt) {
     const p = localPlayer;
     p.isLightOn = mouse.left || mouse.right; p.isLightFocus = mouse.right;
     
-    // 讓本機的光束視覺外觀（Light Cone）完美隨著滑鼠上下抬頭進行傾斜旋轉
-    if (lightConeMesh) {
+    if (p.lightGroup) {
+        p.lightGroup.rotation.set(cameraPitch, 0, 0); 
+        
+        const targetColor = new THREE.Color(COLORS[p.lightColorIndex].hex);
+        p.spotLight.color.lerp(targetColor, 0.1);
+        
         if (!p.isLightOn) { 
-            lightConeMesh.material.opacity = 0; 
+            p.spotLight.intensity += (0 - p.spotLight.intensity) * 0.15;
         } else {
-            lightConeMesh.rotation.set(cameraPitch, 0, 0); // X軸旋轉同步上下抬頭
-            if (p.isLightFocus) { 
-                lightConeMesh.scale.set(3, 3, 180); 
-                lightConeMesh.material.opacity = 0.55; 
-            } else { 
-                lightConeMesh.scale.set(20, 20, 70); 
-                lightConeMesh.material.opacity = 0.25; 
-            }
+            const targetAngle = p.isLightFocus ? Math.PI / 10 : Math.PI / 4;
+            const targetIntensity = p.isLightFocus ? 250 : 100;
+            
+            p.spotLight.angle += (targetAngle - p.spotLight.angle) * 0.15;
+            p.spotLight.intensity += (targetIntensity - p.spotLight.intensity) * 0.15;
         }
     }
 
-    const healRate = p.isLightFocus ? 10 : 5; 
-    const dmgRate = p.isLightFocus ? 10 : 5;
+    const healRate = p.isLightFocus ? GAME_SETTINGS.focusHeal : GAME_SETTINGS.lightHeal; 
+    const dmgRate = p.isLightFocus ? GAME_SETTINGS.focusDmg : GAME_SETTINGS.lightDmg;
+    
+    if (!window.beamTimers) window.beamTimers = {};
 
     // 本機玩家進行光束判定
     if (p.isLightOn) {
@@ -1319,34 +1764,43 @@ function updateLightBeamMechanics(dt) {
             const target = players[key];
             
             if (checkBeamHit(p, target, p.isLightFocus)) {
-                if (p.lightColorIndex === target.bodyColorIndex) {
-                    if (isMultiplayer) {
-                        broadcast({ type: 'trigger_heal', targetId: key, amount: healRate * dt }); 
-                    } else {
-                        if (key.startsWith('bot_') && target.hp < 100) {
-                            target.hp = Math.min(100, target.hp + healRate * dt);
-                        } else if (key === myPeerId || key === 'local') {
-                            healLocalPlayer(healRate * dt);
+                if (!window.beamTimers[key]) window.beamTimers[key] = 0;
+                window.beamTimers[key] += dt;
+                
+                if (window.beamTimers[key] >= GAME_SETTINGS.lightDelay) {
+                    if (p.lightColorIndex === target.bodyColorIndex) {
+                        if (isMultiplayer) {
+                            broadcast({ type: 'trigger_heal', targetId: key, amount: healRate * dt }); 
+                        } else {
+                            if (key.startsWith('bot_') && target.hp < 100) {
+                                target.hp = Math.min(100, target.hp + healRate * dt);
+                            } else if (key === myPeerId || key === 'local') {
+                                healLocalPlayer(healRate * dt);
+                            }
                         }
-                    }
-                } else {
-                    if (isMultiplayer) {
-                        broadcast({ type: 'trigger_damage', targetId: key, amount: dmgRate * dt, attackerId: myPeerId });
                     } else {
-                        if (key.startsWith('bot_')) {
-                            target.hp -= dmgRate * dt;
-                            if (target.hp <= 0) {
-                                target.deaths++; p.kills++; 
-                                showToast(`💥 你消滅了 ${target.name}！`); 
-                                playSound('kill');
-                                target.hp = 100; 
-                                target.mesh.position.copy(getRandomSpawnPosition());
+                        if (isMultiplayer) {
+                            broadcast({ type: 'trigger_damage', targetId: key, amount: dmgRate * dt, attackerId: myPeerId });
+                        } else {
+                            if (key.startsWith('bot_')) {
+                                target.hp -= dmgRate * dt;
+                                if (target.hp <= 0) {
+                                    target.deaths++; p.kills++; 
+                                    showToast(`💥 你消滅了 ${target.name}！`); 
+                                    playSound('kill');
+                                    target.hp = 100; 
+                                    target.mesh.position.copy(getRandomSpawnPosition());
+                                }
                             }
                         }
                     }
                 }
+            } else {
+                window.beamTimers[key] = 0;
             }
         }
+    } else {
+        window.beamTimers = {};
     }
 
     // 單人模式下的機器人（NPC）自動進行交叉瞄準判定
@@ -1354,27 +1808,38 @@ function updateLightBeamMechanics(dt) {
         for (let attackerKey in players) {
             if (!attackerKey.startsWith('bot_')) continue;
             const attacker = players[attackerKey];
-            if (!attacker.isLightOn) continue;
+            if (!attacker.isLightOn) {
+                if (attacker.beamTimers) attacker.beamTimers = {};
+                continue;
+            }
+            if (!attacker.beamTimers) attacker.beamTimers = {};
 
-            const attDmgRate = attacker.isLightFocus ? 10 : 5;
+            const attDmgRate = attacker.isLightFocus ? GAME_SETTINGS.focusDmg : GAME_SETTINGS.lightDmg;
 
             for (let targetKey in players) {
                 if (attackerKey === targetKey) continue;
                 const target = players[targetKey];
 
                 if (checkBeamHit(attacker, target, attacker.isLightFocus)) {
-                    if (attacker.lightColorIndex !== target.bodyColorIndex) {
-                        if (targetKey === 'local' || targetKey === myPeerId) {
-                            damageLocalPlayer(attDmgRate * dt, attackerKey);
-                        } else if (targetKey.startsWith('bot_')) {
-                            target.hp -= attDmgRate * dt;
-                            if (target.hp <= 0) {
-                                target.deaths++; attacker.kills++; 
-                                target.hp = 100;
-                                target.mesh.position.copy(getRandomSpawnPosition());
+                    if (!attacker.beamTimers[targetKey]) attacker.beamTimers[targetKey] = 0;
+                    attacker.beamTimers[targetKey] += dt;
+                    
+                    if (attacker.beamTimers[targetKey] >= GAME_SETTINGS.lightDelay) {
+                        if (attacker.lightColorIndex !== target.bodyColorIndex) {
+                            if (targetKey === 'local' || targetKey === myPeerId) {
+                                damageLocalPlayer(attDmgRate * dt, attackerKey);
+                            } else if (targetKey.startsWith('bot_')) {
+                                target.hp -= attDmgRate * dt;
+                                if (target.hp <= 0) {
+                                    target.deaths++; attacker.kills++; 
+                                    target.hp = 100;
+                                    target.mesh.position.copy(getRandomSpawnPosition());
+                                }
                             }
                         }
                     }
+                } else {
+                    attacker.beamTimers[targetKey] = 0;
                 }
             }
         }
@@ -1384,6 +1849,7 @@ function updateLightBeamMechanics(dt) {
 function healLocalPlayer(amount) {
     const p = localPlayer; if (p.hp >= 100) return;
     p.hp = Math.min(100, p.hp + amount); spawnHealParticles(p.mesh.position); playSound('heal');
+    if (isMultiplayer) updateNetworkSync(true); // Force sync
 }
 
 function damageLocalPlayer(amount, attackerId) {
@@ -1395,23 +1861,34 @@ function damageLocalPlayer(amount, attackerId) {
         let killer = "神秘力量"; if (attackerId === "尖刺") killer = "尖刺陷阱"; else if (attackerId === "虛空") killer = "無盡虛空"; else if (players[attackerId]) killer = players[attackerId].name;
         killLocalPlayer(killer);
     }
+    if (isMultiplayer) updateNetworkSync(true); // Force sync
 }
 
 function killLocalPlayer(killerName) {
     localPlayer.deaths++; showToast(`💀 你被 ${killerName} 消滅了！`);
     if (isMultiplayer) broadcast({ type: 'player_killed', victimName: localPlayerName, killerName: killerName });
     localPlayer.hp = 100; localPlayer.velocity.set(0, 0, 0); localPlayer.mesh.position.copy(getRandomSpawnPosition());
+    if (isMultiplayer) updateNetworkSync(true);
 }
 
-function updateNetworkSync() {
+/* ==============================================================
+   修正：加入 type: 'player_update' 發送包，確保 Host 能夠解析
+============================================================== */
+function updateNetworkSync(force = false) {
     if (!isMultiplayer) return;
+    const now = Date.now();
+    if (!window.lastSyncTime) window.lastSyncTime = 0;
+    if (!force && now - window.lastSyncTime < 50) return; // ~20 FPS limit
+
     const myData = { 
+        type: 'player_update', 
         id: myPeerId, name: localPlayerName, 
         x: localPlayer.mesh.position.x, y: localPlayer.mesh.position.y, z: localPlayer.mesh.position.z, 
         ry: localPlayer.mesh.rotation.y, 
         bodyColor: localPlayer.bodyColorIndex, lightColor: localPlayer.lightColorIndex, 
-        isLightOn: localPlayer.isLightOn, isLightFocus: localPlayer.isLightFocus, 
-        pitch: cameraPitch, // 同步本機玩家的垂直角度給所有人
+        isLightOn: isPaused ? false : localPlayer.isLightOn, 
+        isLightFocus: isPaused ? false : localPlayer.isLightFocus, 
+        pitch: cameraPitch, 
         hp: localPlayer.hp, kills: localPlayer.kills, deaths: localPlayer.deaths 
     };
     if (isHost) {
@@ -1423,12 +1900,14 @@ function updateNetworkSync() {
                 ry: p.mesh.rotation.y, 
                 bodyColor: p.bodyColorIndex, lightColor: p.lightColorIndex, 
                 isLightOn: p.isLightOn, isLightFocus: p.isLightFocus, 
-                pitch: p.pitch || 0, // 轉發玩家們的垂直角度
+                pitch: p.pitch || 0, 
                 hp: p.hp, kills: p.kills, deaths: p.deaths 
             });
         }
         broadcast({ type: 'sync_players', players: playersState });
     } else broadcast(myData);
+    
+    window.lastSyncTime = now;
 }
 
 function updateCameraFollow() {
@@ -1437,6 +1916,7 @@ function updateCameraFollow() {
     offset.applyAxisAngle(new THREE.Vector3(1, 0, 0), cameraPitch);
     offset.applyAxisAngle(new THREE.Vector3(0, 1, 0), localPlayer.yRotation);
     const targetCamPos = localPlayer.mesh.position.clone().add(offset);
+    targetCamPos.y = Math.max(1.0, targetCamPos.y); // Prevent clipping through floor
     camera.position.lerp(targetCamPos, 0.15);
     camera.lookAt(localPlayer.mesh.position.clone().add(new THREE.Vector3(0, localPlayer.height * 0.5, 0)));
 }
@@ -1468,17 +1948,25 @@ function updateHUDOverlay() {
             barEl.style = 'position:absolute; pointer-events:none; background:rgba(15,23,42,0.7); padding:4px 8px; border-radius:8px; border:1px solid rgba(255,255,255,0.2); color:#fff; font-size:12px; text-align:center; transform:translate(-50%,-100%); z-index:4; backdrop-filter:blur(4px);';
             document.body.appendChild(barEl);
         }
-        if (!GAME_SETTINGS.hpBarPersistent && key !== myPeerId) barEl.style.display = (p.hp < 100) ? 'block' : 'none'; else barEl.style.display = 'block';
 
         const screenPos = p.mesh.position.clone().add(new THREE.Vector3(0, p.height + 2.5, 0)).project(camera);
         if (screenPos.z > 1) barEl.style.display = 'none';
         else {
+            barEl.style.display = 'block';
             barEl.style.left = `${(screenPos.x*.5+.5)*window.innerWidth}px`; barEl.style.top = `${(-screenPos.y*.5+.5)*window.innerHeight}px`;
-            const hpP = Math.floor(p.hp); const cName = COLORS[p.bodyColorIndex].name; const cHex = '#'+COLORS[p.bodyColorIndex].hex.toString(16);
-            barEl.innerHTML = `<strong style="color:${cHex}">${p.name}</strong><br>
-                               <div style="background:#334155; width:80px; height:6px; border-radius:3px; margin:4px auto 0; overflow:hidden;">
-                                    <div style="background:${p.hp<30?'#ef4444':'#10b981'}; width:${hpP}%; height:100%; transition:width 0.2s;"></div>
-                               </div>`;
+            const hpP = Math.floor(Math.max(0, Math.min(100, p.hp))); const cName = COLORS[p.bodyColorIndex].name; const cHex = '#'+COLORS[p.bodyColorIndex].hex.toString(16).padStart(6, '0');
+            let barHtml = '';
+            if (GAME_SETTINGS.showName) {
+                barHtml += `<strong style="color:${cHex}; text-shadow:0 0 2px #000;">${p.name}</strong>`;
+            }
+            if (GAME_SETTINGS.hpBarPersistent) {
+                if (barHtml !== '') barHtml += '<br>';
+                barHtml += `<div style="background:#334155; width:80px; height:6px; border-radius:3px; margin:4px auto 0; overflow:hidden;">
+                                <div style="background:${p.hp<30?'#ef4444':'#10b981'}; width:${hpP}%; height:100%; transition:width 0.2s;"></div>
+                            </div>`;
+            }
+            if (barHtml === '') barEl.style.display = 'none';
+            else barEl.innerHTML = barHtml;
         }
     }
     document.querySelectorAll('[id^="hp-bar-"]').forEach(el => { if (!players[el.id.replace('hp-bar-','')]) el.remove(); });
@@ -1498,11 +1986,9 @@ function endGame() {
         }
     }
     
-    // 取代 alert，直接將數據渲染進精心製作的結算 UI Modal
     document.getElementById('winner-announce').innerText = `👑 最終贏家：${winner}`;
     document.getElementById('winner-detail').innerText = `以 ${maxKills} 擊殺成功奪冠！`;
     
-    // 隱藏一般 HUD，顯示結算畫面
     document.getElementById('hud').style.display = 'none';
     showScreen('game-over-screen');
 }
