@@ -1019,6 +1019,17 @@ function hostStartGame() {
     }
 }
 
+function setCapsuleColor(capsuleMesh, hexColor) {
+    if (capsuleMesh.type === 'Group') {
+        capsuleMesh.children.forEach(c => {
+            if (c.material) { c.material.color.setHex(hexColor); if (c.material.emissive) c.material.emissive.setHex(hexColor); }
+        });
+    } else if (capsuleMesh.material) {
+        capsuleMesh.material.color.setHex(hexColor);
+        if (capsuleMesh.material.emissive) capsuleMesh.material.emissive.setHex(hexColor);
+    }
+}
+
 function getFormSettings() {
     return {
         timeLimit: parseInt(document.getElementById('set-time').value),
@@ -1097,8 +1108,7 @@ function handleNetworkData(senderPeerId, data) {
         for (let id in lobbyPlayers) {
             if (id !== myPeerId) spawnRemotePlayer(id, lobbyPlayers[id].name);
         }
-    }
-    else if (data.type === 'register_name') {
+    } else if (data.type === 'register_name') {
         if (!players[senderPeerId]) spawnRemotePlayer(senderPeerId, data.name);
         else players[senderPeerId].name = data.name;
         broadcast({ type: 'sync_names', list: getAllPlayerNames() });
@@ -1122,7 +1132,7 @@ function handleNetworkData(senderPeerId, data) {
                 p.isLightFocus = pData.isLightFocus;
                 p.pitch = pData.pitch || 0;
                 p.hp = pData.hp; p.kills = pData.kills; p.deaths = pData.deaths;
-                p.capsuleMesh.material.color.setHex(COLORS[pData.bodyColor].hex);
+                setCapsuleColor(p.capsuleMesh, COLORS[pData.bodyColor].hex);
                 p.targetPos = new THREE.Vector3(pData.x, pData.y, pData.z);
                 p.targetRy = pData.ry;
             }
@@ -1138,7 +1148,7 @@ function handleNetworkData(senderPeerId, data) {
         p.isLightFocus = data.isLightFocus;
         p.pitch = data.pitch || 0;
         p.hp = data.hp; p.kills = data.kills; p.deaths = data.deaths;
-        p.capsuleMesh.material.color.setHex(COLORS[data.bodyColor].hex);
+        setCapsuleColor(p.capsuleMesh, COLORS[data.bodyColor].hex);
         p.targetPos = new THREE.Vector3(data.x, data.y, data.z);
         p.targetRy = data.ry;
     }
@@ -1188,16 +1198,23 @@ function handlePlayerDisconnect(peerId) {
 }
 
 function syncUISettings(s) {
-    ['time','map','npc','psize','spike-c','spike-d','pad-c','pad-p','pad-cd'].forEach(k => {
-        let val;
-        if (k === 'psize') val = s.playerSize.toFixed(1);
-        else if (k === 'npc') val = s.npcCount !== undefined ? s.npcCount : 5;
-        else val = s[k.replace('-','').replace('p','padPush').replace('c','Count').replace('d','Damage').replace('time','timeLimit').replace('map','mapSize')];
-        
-        if(document.getElementById(`val-${k}`)) document.getElementById(`val-${k}`).innerText = val;
-        if(document.getElementById(`set-${k}`)) document.getElementById(`set-${k}`).value = val;
-    });
-    document.getElementById('set-hpbar').checked = s.hpBarPersistent;
+    const map = {
+        'time': s.timeLimit, 'map': s.mapSize, 'mbright': s.mapBrightness,
+        'npc': s.npcCount !== undefined ? s.npcCount : 5, 'psize': s.playerSize.toFixed(1),
+        'obs': s.obstacleDensity, 'spike-c': s.spikeCount, 'spike-d': s.spikeDamage,
+        'pad-c': s.padCount, 'pad-p': s.padPush, 'pad-cd': s.padCooldown,
+        'spike-kb': s.spikeKnockback, 'speed-b': s.baseSpeed, 'speed-m': s.sprintMultiplier,
+        'jump': s.jumpHeight, 'grav': s.gravity, 'fric': s.friction,
+        'heal-l': s.lightHeal, 'dmg-l': s.lightDmg, 'heal-f': s.focusHeal, 'dmg-f': s.focusDmg,
+        'light-delay': s.lightDelay
+    };
+    for (let k in map) {
+        if(document.getElementById(`val-${k}`)) document.getElementById(`val-${k}`).innerText = map[k];
+        if(document.getElementById(`set-${k}`)) document.getElementById(`set-${k}`).value = map[k];
+    }
+    if (document.getElementById('set-hpbar')) document.getElementById('set-hpbar').checked = s.hpBarPersistent;
+    if (document.getElementById('set-showname')) document.getElementById('set-showname').checked = s.showName;
+    if (document.getElementById('set-reverse')) document.getElementById('set-reverse').checked = s.reverseControls;
 }
 
 function broadcast(data) {
@@ -1527,7 +1544,8 @@ function setupInputListeners() {
         if (gameState !== 'PLAYING') return;
         if (e.key === 'q' || e.key === 'Q') {
             localPlayer.bodyColorIndex = (localPlayer.bodyColorIndex + 1) % 3;
-            localPlayer.capsuleMesh.material.color.setHex(COLORS[localPlayer.bodyColorIndex].hex); playSound('heal');
+            setCapsuleColor(localPlayer.capsuleMesh, COLORS[localPlayer.bodyColorIndex].hex);
+            playSound('heal');
         }
         if (e.key === 'e' || e.key === 'E') {
             localPlayer.lightColorIndex = (localPlayer.lightColorIndex + 1) % 3;
