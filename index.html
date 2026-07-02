@@ -4,6 +4,11 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>RGB BATTLE 3D</title>
+    <meta name="title" content="RGB BATTLE 3D">
+    <meta property="og:description" content="《光束競技場 3D》是一款結合光影匿蹤的 3D 射擊對戰。切換光束、善用地形，在黑暗中用光線擊殺所有對手！">
+    <meta property="og:title" content="RGB BATTLE 3D">
+    <meta property="og:image" content="https://cdn.jsdelivr.net/gh/billy5986/rgb_battle_p2p/assets/images/rgb_battle_3d_thumbnail.png">
+    <meta property="og:url" content="https://billy5986.github.io/rgb_battle_p2p/">
     <style>
         :root {
             --bg-color: #050914;
@@ -314,7 +319,7 @@
     <!-- 主選單 -->
     <div id="main-menu" class="ui-layer">
         <div class="panel">
-            <h1 class="game-title">Light Arena</h1>
+            <h1 class="game-title">RGB BATTLE 3D</h1>
             <div class="game-subtitle">3D Beam Survival</div>
             
             <div class="menu-card" style="margin-bottom: 25px; text-align: center; border-color: rgba(56,189,248,0.3);">
@@ -1151,8 +1156,18 @@ function handleNetworkData(senderPeerId, data) {
         }
     }
     else if (data.type === 'player_killed') { 
+        if (data.attackerId && players[data.attackerId]) {
+            players[data.attackerId].kills++;
+        }
         showToast(`💥 ${data.killerName} 消滅了 ${data.victimName}！`); 
         playSound('kill'); 
+        if (isHost) {
+            for (let k in connections) {
+                if (k !== senderPeerId && connections[k] && connections[k].open) {
+                    connections[k].send(data);
+                }
+            }
+        }
     }
 }
 
@@ -1859,14 +1874,14 @@ function damageLocalPlayer(amount, attackerId) {
 
     if (p.hp <= 0) {
         let killer = "神秘力量"; if (attackerId === "尖刺") killer = "尖刺陷阱"; else if (attackerId === "虛空") killer = "無盡虛空"; else if (players[attackerId]) killer = players[attackerId].name;
-        killLocalPlayer(killer);
+        killLocalPlayer(killer, attackerId);
     }
     if (isMultiplayer) updateNetworkSync(true); // Force sync
 }
 
-function killLocalPlayer(killerName) {
+function killLocalPlayer(killerName, attackerId = null) {
     localPlayer.deaths++; showToast(`💀 你被 ${killerName} 消滅了！`);
-    if (isMultiplayer) broadcast({ type: 'player_killed', victimName: localPlayerName, killerName: killerName });
+    if (isMultiplayer) broadcast({ type: 'player_killed', victimName: localPlayerName, killerName: killerName, attackerId: attackerId });
     localPlayer.hp = 100; localPlayer.velocity.set(0, 0, 0); localPlayer.mesh.position.copy(getRandomSpawnPosition());
     if (isMultiplayer) updateNetworkSync(true);
 }
