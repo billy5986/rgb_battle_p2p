@@ -393,12 +393,18 @@
 
             <div class="control-label"><span>地圖半徑</span><span id="val-map">400</span></div>
             <input type="range" id="set-map" min="100" max="3000" step="100" value="400" oninput="updateVal('set-map','val-map')">
+            
+            <div class="control-label"><span>地圖亮度</span><span id="val-mbright">15</span></div>
+            <input type="range" id="set-mbright" min="0" max="100" value="15" oninput="updateVal('set-mbright','val-mbright')">
 
             <div class="control-label" id="npc-count-setting"><span>NPC 數量 (僅單人)</span><span id="val-npc">5</span></div>
             <input type="range" id="set-npc" min="0" max="20" value="5" oninput="updateVal('set-npc','val-npc')">
 
             <div class="control-label"><span>人物比例 (倍)</span><span id="val-psize">1.0</span></div>
             <input type="range" id="set-psize" min="0.5" max="5.0" step="0.1" value="1.0" oninput="updateVal('set-psize','val-psize')">
+
+            <div class="control-label"><span>障礙物占比</span><span id="val-obs">50</span></div>
+            <input type="range" id="set-obs" min="0" max="100" value="50" oninput="updateVal('set-obs','val-obs')">
 
                 <div class="control-label" style="margin-top: 10px;"><span>尖刺數量</span><span id="val-spike-c">15</span></div>
                 <input type="range" id="set-spike-c" min="0" max="200" value="15" oninput="updateVal('set-spike-c','val-spike-c')">
@@ -452,8 +458,8 @@
 
 
             <div style="display: flex; gap: 10px; margin-top: 15px;">
-                <button id="btn-setup-action" class="btn btn-success" onclick="showSettingsConfirm()">創建並進入</button>
                 <button id="btn-setup-back" class="btn btn-danger" onclick="showScreen('how-to-play-panel')">返回</button>
+                <button id="btn-setup-action" class="btn btn-success" onclick="showSettingsConfirm()">創建並進入</button>
             </div>
 
         </div>
@@ -601,8 +607,10 @@ let timerInterval = null;
 let GAME_SETTINGS = {
     timeLimit: 5,
     mapSize: 400,
+    mapBrightness: 15,
     npcCount: 5,
     playerSize: 1.0,
+    obstacleDensity: 50,
     hpBarPersistent: true,
     showName: true,
     spikeCount: 15,
@@ -925,8 +933,10 @@ function renderLobby() {
         
         const me = lobbyPlayers[myPeerId];
         if (me && me.ready) {
-            btnReady.innerText = '取消準備';
+            btnReady.innerText = '已準備';
             btnReady.className = 'btn btn-success';
+            btnReady.style.background = '';
+            btnReady.style.boxShadow = '';
         } else {
             btnReady.innerText = '未準備';
             btnReady.className = 'btn btn-danger';
@@ -999,6 +1009,7 @@ function hostStartGame() {
     GAME_SETTINGS = getFormSettings();
     const seed = Math.floor(Math.random() * 1000000);
     remoteObstaclesSeed = seed;
+    currentObstaclesSeed = seed; // 保存初始種子給後進玩家
     broadcast({ type: 'game_start', settings: GAME_SETTINGS, obstaclesSeed: seed });
     
     buildWorldAndStart();
@@ -1012,8 +1023,10 @@ function getFormSettings() {
     return {
         timeLimit: parseInt(document.getElementById('set-time').value),
         mapSize: parseInt(document.getElementById('set-map').value),
+        mapBrightness: parseInt(document.getElementById('set-mbright').value),
         npcCount: parseInt(document.getElementById('set-npc').value),
         playerSize: parseFloat(document.getElementById('set-psize').value),
+        obstacleDensity: parseInt(document.getElementById('set-obs').value),
         hpBarPersistent: document.getElementById('set-hpbar').checked,
         showName: document.getElementById('set-showname').checked,
         spikeCount: parseInt(document.getElementById('set-spike-c').value),
@@ -1211,7 +1224,7 @@ let localPlayer = {
     onGround: false, radius: 0.8, height: 2.2, yRotation: 0, pitch: 0
 };
 let localPlayerName = "我";
-let players = {}; let spikes = []; let pads = []; let particles = [];
+let players = {}; let spikes = []; let pads = [];
 let remoteObstaclesSeed = null; let lightConeMesh = null;
 let keys = {}; let mouse = { x: 0, y: 0, left: false, right: false };
 let cameraPitch = 0; let isPaused = false;
@@ -1224,13 +1237,45 @@ const padMat = new THREE.MeshBasicMaterial({ color: 0x06b6d4 }); // 純色發光
 
 function createCapsule(radius, height, colorHex) {
     const group = new THREE.Group();
-    const cylHeight = height - radius * 2;
-    const cylGeo = new THREE.CylinderGeometry(radius, radius, cylHeight, 16);
-    const mat = new THREE.MeshStandardMaterial({ color: colorHex, roughness: 0.3, metalness: 0.4, emissive: colorHex, emissiveIntensity: 0.2 });
-    const cyl = new THREE.Mesh(cylGeo, mat); cyl.position.y = height / 2; cyl.castShadow = true; cyl.receiveShadow = true; group.add(cyl);
-    const sphereTop = new THREE.Mesh(new THREE.SphereGeometry(radius, 16, 16, 0, Math.PI*2, 0, Math.PI/2), mat); sphereTop.position.y = height - radius; sphereTop.castShadow = true; group.add(sphereTop);
-    const sphereBot = new THREE.Mesh(new THREE.SphereGeometry(radius, 16, 16, 0, Math.PI*2, Math.PI/2, Math.PI/2), mat); sphereBot.position.y = radius; sphereBot.castShadow = true; group.add(sphereBot);
-    return { group, visualMesh: cyl };
+    const cylHeight = Math.max(0, height - radius * 2);
+    
+    let visualMesh;
+    if (THREE.CapsuleGeometry) {
+        const geo = new THREE.CapsuleGeometry(radius, cylHeight, 16, 16);
+        const mat = new THREE.MeshStandardMaterial({ 
+            color: colorHex, roughness: 0.2, metalness: 0.8,
+            emissive: colorHex, emissiveIntensity: 0.5 
+        });
+        visualMesh = new THREE.Mesh(geo, mat);
+        visualMesh.castShadow = true; visualMesh.receiveShadow = true;
+        visualMesh.position.y = height / 2;
+        group.add(visualMesh);
+    } else {
+        const mat = new THREE.MeshStandardMaterial({ 
+            color: colorHex, roughness: 0.2, metalness: 0.8,
+            emissive: colorHex, emissiveIntensity: 0.5 
+        });
+        const cylGeo = new THREE.CylinderGeometry(radius, radius, cylHeight, 16);
+        const sphGeo = new THREE.SphereGeometry(radius, 16, 16);
+        
+        const cyl = new THREE.Mesh(cylGeo, mat);
+        cyl.position.y = height / 2;
+        cyl.castShadow = true; cyl.receiveShadow = true;
+        
+        const topSph = new THREE.Mesh(sphGeo, mat);
+        topSph.position.y = height / 2 + cylHeight / 2;
+        topSph.castShadow = true; topSph.receiveShadow = true;
+        
+        const botSph = new THREE.Mesh(sphGeo, mat);
+        botSph.position.y = height / 2 - cylHeight / 2;
+        botSph.castShadow = true; botSph.receiveShadow = true;
+        
+        visualMesh = new THREE.Group();
+        visualMesh.add(cyl); visualMesh.add(topSph); visualMesh.add(botSph);
+        group.add(visualMesh);
+    }
+    
+    return { group, visualMesh };
 }
 
 function startGame() {
@@ -1255,7 +1300,8 @@ function buildWorldAndStart() {
     document.body.appendChild(renderer.domElement);
     clock = new THREE.Clock();
 
-    const ambient = new THREE.AmbientLight(0x111116, 0.15); scene.add(ambient);
+    const ambientIntensity = GAME_SETTINGS.mapBrightness / 100;
+    const ambient = new THREE.AmbientLight(0xffffff, ambientIntensity); scene.add(ambient);
 
     // 地板 (正方形)
     const mapS = GAME_SETTINGS.mapSize;
@@ -1267,10 +1313,6 @@ function buildWorldAndStart() {
     const gridHelper = new THREE.GridHelper(mapS * 2, divisions, gridColorMain, gridColorSub);
     gridHelper.position.y = 0.1; scene.add(gridHelper);
 
-    // 邊界光環
-    const ringGeo = new THREE.RingGeometry(mapS - 10, mapS, 64);
-    const ringMat = new THREE.MeshBasicMaterial({ color: 0x38bdf8, side: THREE.DoubleSide, transparent: true, opacity: 0.5 });
-    const ring = new THREE.Mesh(ringGeo, ringMat); ring.rotation.x = Math.PI / 2; ring.position.y = 0.15; scene.add(ring);
 
     // 人物基礎大小
     localPlayer.radius = 5.0 * GAME_SETTINGS.playerSize; 
@@ -1324,20 +1366,73 @@ function buildWorldAndStart() {
 }
 
 function getRandomSpawnPosition() {
-    const r = Math.random() * (GAME_SETTINGS.mapSize * 0.8); const angle = Math.random() * Math.PI * 2;
-    return new THREE.Vector3(Math.cos(angle) * r, 5, Math.sin(angle) * r);
+    const isOverlapping = (pos, radius) => {
+        if (!window.obstacles) return false;
+        const testBox = new THREE.Box3(new THREE.Vector3(pos.x - radius, 0, pos.z - radius), new THREE.Vector3(pos.x + radius, 20, pos.z + radius));
+        for (let obs of window.obstacles) if (obs.box.intersectsBox(testBox)) return true;
+        return false;
+    };
+    
+    let r, angle, pos, attempts = 0;
+    do {
+        r = Math.random() * (GAME_SETTINGS.mapSize * 0.8); 
+        angle = Math.random() * Math.PI * 2;
+        pos = new THREE.Vector3(Math.cos(angle) * r, 5, Math.sin(angle) * r);
+        attempts++;
+    } while (isOverlapping(pos, 10) && attempts < 20);
+    
+    return pos;
 }
 
 function generateMapAssets() {
     spikes.forEach(s => scene.remove(s.mesh)); pads.forEach(p => scene.remove(p.mesh));
-    spikes = []; pads = [];
+    if (window.obstacles) window.obstacles.forEach(o => scene.remove(o.mesh));
+    spikes = []; pads = []; window.obstacles = []; window.obstacleMeshes = [];
     const randomFunc = () => { if (remoteObstaclesSeed !== null) { let x = Math.sin(remoteObstaclesSeed++) * 10000; return x - Math.floor(x); } return Math.random(); };
     const mapR = GAME_SETTINGS.mapSize;
+
+    const numObstacles = Math.floor((mapR / 100) * GAME_SETTINGS.obstacleDensity);
+    const obsMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.9, metalness: 0.1 });
+    for (let i = 0; i < numObstacles; i++) {
+        const w = 15 + randomFunc() * 35;
+        const h = 20 + randomFunc() * 80;
+        const d = 15 + randomFunc() * 35;
+        const geo = new THREE.BoxGeometry(w, h, d);
+        const mesh = new THREE.Mesh(geo, obsMat);
+        
+        let ox, oz, attempts = 0;
+        do {
+            ox = (randomFunc() - 0.5) * mapR * 1.6;
+            oz = (randomFunc() - 0.5) * mapR * 1.6;
+            attempts++;
+        } while (Math.hypot(ox, oz) < 50 && attempts < 10);
+        
+        mesh.position.set(ox, h/2, oz);
+        mesh.castShadow = true; mesh.receiveShadow = true; scene.add(mesh);
+        
+        mesh.updateMatrixWorld();
+        const box = new THREE.Box3().setFromObject(mesh);
+        window.obstacles.push({ mesh: mesh, box: box, w, h, d });
+        window.obstacleMeshes.push(mesh);
+    }
+
+    const isOverlapping = (pos, radius) => {
+        const testBox = new THREE.Box3(new THREE.Vector3(pos.x - radius, 0, pos.z - radius), new THREE.Vector3(pos.x + radius, 20, pos.z + radius));
+        for (let obs of window.obstacles) if (obs.box.intersectsBox(testBox)) return true;
+        return false;
+    };
 
     const sGeo = new THREE.ConeGeometry(3, 10, 8);
     for (let i = 0; i < GAME_SETTINGS.spikeCount; i++) {
         const mesh = new THREE.Mesh(sGeo, spikeMat.clone());
-        mesh.position.set((randomFunc()-0.5) * mapR * 1.6, 5, (randomFunc()-0.5) * mapR * 1.6);
+        let tx, tz, attempts = 0;
+        do {
+            tx = (randomFunc()-0.5) * mapR * 1.6;
+            tz = (randomFunc()-0.5) * mapR * 1.6;
+            attempts++;
+        } while(isOverlapping(new THREE.Vector3(tx, 0, tz), 8) && attempts < 20);
+        
+        mesh.position.set(tx, 5, tz);
         mesh.castShadow = true; mesh.receiveShadow = true; scene.add(mesh);
         spikes.push({ mesh: mesh, pos: mesh.position, radius: 3, height: 10 });
     }
@@ -1345,7 +1440,14 @@ function generateMapAssets() {
     const pGeo = new THREE.CylinderGeometry(12, 12, 0.5, 16);
     for (let i = 0; i < GAME_SETTINGS.padCount; i++) {
         const mesh = new THREE.Mesh(pGeo, padMat.clone());
-        mesh.position.set((randomFunc()-0.5) * mapR * 1.6, 0.25, (randomFunc()-0.5) * mapR * 1.6);
+        let tx, tz, attempts = 0;
+        do {
+            tx = (randomFunc()-0.5) * mapR * 1.6;
+            tz = (randomFunc()-0.5) * mapR * 1.6;
+            attempts++;
+        } while(isOverlapping(new THREE.Vector3(tx, 0, tz), 15) && attempts < 20);
+        
+        mesh.position.set(tx, 0.25, tz);
         scene.add(mesh);
         pads.push({ mesh: mesh, pos: mesh.position, radius: 12, cooldowns: {} });
     }
@@ -1474,31 +1576,8 @@ function setupInputListeners() {
 function resumeGame() { isPaused = false; document.body.requestPointerLock(); showScreen(null); }
 
 /* ==========================================
-   粒子特效系統
+   (Particle System Removed)
 ========================================== */
-function spawnHealParticles(pos) {
-    for (let i = 0; i < 5; i++) {
-        const mesh = new THREE.Mesh(new THREE.BoxGeometry(1.5,1.5,1.5), new THREE.MeshBasicMaterial({ color: 0x10b981 }));
-        mesh.position.copy(pos).add(new THREE.Vector3((Math.random()-0.5)*4, Math.random()*4, (Math.random()-0.5)*4));
-        scene.add(mesh);
-        particles.push({ mesh: mesh, vel: new THREE.Vector3((Math.random()-0.5)*1.5, 2.5+Math.random(), (Math.random()-0.5)*1.5), life: 1.0, decay: 1.5+Math.random(), type: 'heal' });
-    }
-}
-function spawnDamageParticles(pos) {
-    for (let i = 0; i < 6; i++) {
-        const mesh = new THREE.Mesh(new THREE.DodecahedronGeometry(1.5), new THREE.MeshBasicMaterial({ color: 0xef4444, transparent: true, opacity: 0.8 }));
-        mesh.position.copy(pos).add(new THREE.Vector3((Math.random()-0.5)*3.5, Math.random()*4, (Math.random()-0.5)*3.5));
-        scene.add(mesh);
-        particles.push({ mesh: mesh, vel: new THREE.Vector3((Math.random()-0.5)*2.2, 3+Math.random()*2.5, (Math.random()-0.5)*2.2), life: 0.8, decay: 1.2+Math.random(), type: 'dmg' });
-    }
-}
-function updateParticles(dt) {
-    for (let i = particles.length - 1; i >= 0; i--) {
-        const p = particles[i]; p.life -= dt * p.decay; p.mesh.position.addScaledVector(p.vel, dt);
-        p.mesh.scale.setScalar(p.life); p.mesh.rotation.y += dt*3;
-        if (p.life <= 0) { scene.remove(p.mesh); particles.splice(i, 1); }
-    }
-}
 
 /* ==========================================
    物理判定 & 遊戲主迴圈
@@ -1526,7 +1605,6 @@ function animate() {
         }
         
         updateLightBeamMechanics(dt);
-        updateParticles(dt);
     }
     updateNetworkSync();
     
@@ -1578,6 +1656,42 @@ function updateBotsAI(dt) {
 
         if (!bot.onGround) bot.velocity.y -= 100.0 * dt; else bot.velocity.y = Math.max(0, bot.velocity.y);
         bot.mesh.position.addScaledVector(bot.velocity, dt);
+
+        if (window.obstacles) {
+            const pRadius = bot.radius + 1.0; 
+            const pBox = new THREE.Box3(
+                new THREE.Vector3(bot.mesh.position.x - pRadius, bot.mesh.position.y, bot.mesh.position.z - pRadius),
+                new THREE.Vector3(bot.mesh.position.x + pRadius, bot.mesh.position.y + bot.height, bot.mesh.position.z + pRadius)
+            );
+            for (let obs of window.obstacles) {
+                if (pBox.intersectsBox(obs.box)) {
+                    const overlapX1 = obs.box.max.x - pBox.min.x;
+                    const overlapX2 = pBox.max.x - obs.box.min.x;
+                    const overlapZ1 = obs.box.max.z - pBox.min.z;
+                    const overlapZ2 = pBox.max.z - obs.box.min.z;
+                    const overlapY1 = obs.box.max.y - pBox.min.y;
+                    
+                    const minOverlap = Math.min(overlapX1, overlapX2, overlapZ1, overlapZ2, Math.max(0, overlapY1));
+                    
+                    if (minOverlap === overlapY1) {
+                        bot.mesh.position.y += overlapY1; bot.velocity.y = 0; bot.onGround = true;
+                    } else if (minOverlap === overlapX1) {
+                        bot.mesh.position.x += overlapX1; bot.velocity.x = 0;
+                    } else if (minOverlap === overlapX2) {
+                        bot.mesh.position.x -= overlapX2; bot.velocity.x = 0;
+                    } else if (minOverlap === overlapZ1) {
+                        bot.mesh.position.z += overlapZ1; bot.velocity.z = 0;
+                    } else if (minOverlap === overlapZ2) {
+                        bot.mesh.position.z -= overlapZ2; bot.velocity.z = 0;
+                    }
+                    
+                    pBox.set(
+                        new THREE.Vector3(bot.mesh.position.x - pRadius, bot.mesh.position.y, bot.mesh.position.z - pRadius),
+                        new THREE.Vector3(bot.mesh.position.x + pRadius, bot.mesh.position.y + bot.height, bot.mesh.position.z + pRadius)
+                    );
+                }
+            }
+        }
 
         if (bot.mesh.position.y <= 0) {
             if (Math.abs(bot.mesh.position.x) < GAME_SETTINGS.mapSize && Math.abs(bot.mesh.position.z) < GAME_SETTINGS.mapSize) {
@@ -1645,6 +1759,42 @@ function updateLocalPlayerPhysics(dt) {
     if (keys[' '] && p.onGround) { p.velocity.y = GAME_SETTINGS.jumpHeight; p.onGround = false; }
     p.mesh.position.addScaledVector(p.velocity, dt);
 
+    if (window.obstacles) {
+        const pRadius = p.radius + 1.0; 
+        const pBox = new THREE.Box3(
+            new THREE.Vector3(p.mesh.position.x - pRadius, p.mesh.position.y, p.mesh.position.z - pRadius),
+            new THREE.Vector3(p.mesh.position.x + pRadius, p.mesh.position.y + p.height, p.mesh.position.z + pRadius)
+        );
+        for (let obs of window.obstacles) {
+            if (pBox.intersectsBox(obs.box)) {
+                const overlapX1 = obs.box.max.x - pBox.min.x;
+                const overlapX2 = pBox.max.x - obs.box.min.x;
+                const overlapZ1 = obs.box.max.z - pBox.min.z;
+                const overlapZ2 = pBox.max.z - obs.box.min.z;
+                const overlapY1 = obs.box.max.y - pBox.min.y;
+                
+                const minOverlap = Math.min(overlapX1, overlapX2, overlapZ1, overlapZ2, Math.max(0, overlapY1));
+                
+                if (minOverlap === overlapY1) {
+                    p.mesh.position.y += overlapY1; p.velocity.y = 0; p.onGround = true;
+                } else if (minOverlap === overlapX1) {
+                    p.mesh.position.x += overlapX1; p.velocity.x = 0;
+                } else if (minOverlap === overlapX2) {
+                    p.mesh.position.x -= overlapX2; p.velocity.x = 0;
+                } else if (minOverlap === overlapZ1) {
+                    p.mesh.position.z += overlapZ1; p.velocity.z = 0;
+                } else if (minOverlap === overlapZ2) {
+                    p.mesh.position.z -= overlapZ2; p.velocity.z = 0;
+                }
+                
+                pBox.set(
+                    new THREE.Vector3(p.mesh.position.x - pRadius, p.mesh.position.y, p.mesh.position.z - pRadius),
+                    new THREE.Vector3(p.mesh.position.x + pRadius, p.mesh.position.y + p.height, p.mesh.position.z + pRadius)
+                );
+            }
+        }
+    }
+
     if (p.mesh.position.y <= 0) {
         if (Math.abs(p.mesh.position.x) < GAME_SETTINGS.mapSize && Math.abs(p.mesh.position.z) < GAME_SETTINGS.mapSize) {
             p.mesh.position.y = 0; p.onGround = true;
@@ -1697,7 +1847,7 @@ function updateLocalPlayerPhysics(dt) {
                 p.velocity.x += pushDir.x * pushForce;
                 p.velocity.z += pushDir.z * pushForce;
 
-                playSound('boost'); spawnHealParticles(p.mesh.position);
+                playSound('boost'); 
                 pad.mesh.material.color.setHex(0xffffff); setTimeout(() => { pad.mesh.material.color.setHex(0x06b6d4); pad.cooldowns[myIdKey] = false; }, (GAME_SETTINGS.padCooldown/60)*1000);
             }
         }
@@ -1751,6 +1901,13 @@ function checkBeamHit(shooter, target, isFocus) {
             const allowedAngle = angleThreshold + targetThicknessAngle;
             
             if (angle < allowedAngle) {
+                if (window.obstacleMeshes && window.obstacleMeshes.length > 0) {
+                    const rc = new THREE.Raycaster(eyePos, toTarget, 0, dist);
+                    const intersects = rc.intersectObjects(window.obstacleMeshes);
+                    if (intersects.length > 0) {
+                        continue; 
+                    }
+                }
                 return true; 
             }
         }
@@ -1843,6 +2000,8 @@ function updateLightBeamMechanics(dt) {
 
             const attDmgRate = attacker.isLightFocus ? GAME_SETTINGS.focusDmg : GAME_SETTINGS.lightDmg;
 
+            const attHealRate = attacker.isLightFocus ? GAME_SETTINGS.focusHeal : GAME_SETTINGS.lightHeal;
+
             for (let targetKey in players) {
                 if (attackerKey === targetKey) continue;
                 const target = players[targetKey];
@@ -1852,7 +2011,13 @@ function updateLightBeamMechanics(dt) {
                     attacker.beamTimers[targetKey] += dt;
                     
                     if (attacker.beamTimers[targetKey] >= GAME_SETTINGS.lightDelay) {
-                        if (attacker.lightColorIndex !== target.bodyColorIndex) {
+                        if (attacker.lightColorIndex === target.bodyColorIndex) {
+                            if (targetKey === 'local' || targetKey === myPeerId) {
+                                healLocalPlayer(attHealRate * dt);
+                            } else if (targetKey.startsWith('bot_')) {
+                                target.hp = Math.min(100, target.hp + attHealRate * dt);
+                            }
+                        } else {
                             if (targetKey === 'local' || targetKey === myPeerId) {
                                 damageLocalPlayer(attDmgRate * dt, attackerKey);
                             } else if (targetKey.startsWith('bot_')) {
@@ -1875,14 +2040,14 @@ function updateLightBeamMechanics(dt) {
 
 function healLocalPlayer(amount) {
     const p = localPlayer; if (p.hp >= 100) return;
-    p.hp = Math.min(100, p.hp + amount); spawnHealParticles(p.mesh.position); playSound('heal');
+    p.hp = Math.min(100, p.hp + amount); playSound('heal');
     if (isMultiplayer) updateNetworkSync(true); // Force sync
 }
 
 function damageLocalPlayer(amount, attackerId) {
     const p = localPlayer; p.hp = Math.max(0, p.hp - amount);
     p.capsuleMesh.position.x = (Math.random()-0.5)*0.5; setTimeout(() => p.capsuleMesh.position.x = 0, 50);
-    spawnDamageParticles(p.mesh.position); playSound('damage');
+    playSound('damage');
 
     if (p.hp <= 0) {
         let killer = "神秘力量"; if (attackerId === "尖刺") killer = "尖刺陷阱"; else if (attackerId === "虛空") killer = "無盡虛空"; else if (players[attackerId]) killer = players[attackerId].name;
@@ -1980,10 +2145,24 @@ function updateHUDOverlay() {
         }
 
         const screenPos = p.mesh.position.clone().add(new THREE.Vector3(0, p.height + 2.5, 0)).project(camera);
-        if (screenPos.z > 1) barEl.style.display = 'none';
-        else {
-            barEl.style.display = 'block';
-            barEl.style.left = `${(screenPos.x*.5+.5)*window.innerWidth}px`; barEl.style.top = `${(-screenPos.y*.5+.5)*window.innerHeight}px`;
+        if (screenPos.z > 1) {
+            barEl.style.display = 'none';
+        } else {
+            let isVisible = true;
+            if (window.obstacleMeshes && window.obstacleMeshes.length > 0) {
+                const targetPoint = p.mesh.position.clone().add(new THREE.Vector3(0, p.height * 0.75, 0));
+                const dir = targetPoint.clone().sub(camera.position);
+                const dist = dir.length();
+                dir.normalize();
+                const rc = new THREE.Raycaster(camera.position, dir, 0, dist);
+                const intersects = rc.intersectObjects(window.obstacleMeshes);
+                if (intersects.length > 0) isVisible = false;
+            }
+            if (!isVisible) {
+                barEl.style.display = 'none';
+            } else {
+                barEl.style.display = 'block';
+                barEl.style.left = `${(screenPos.x*.5+.5)*window.innerWidth}px`; barEl.style.top = `${(-screenPos.y*.5+.5)*window.innerHeight}px`;
             const hpP = Math.floor(Math.max(0, Math.min(100, p.hp))); const cName = COLORS[p.bodyColorIndex].name; const cHex = '#'+COLORS[p.bodyColorIndex].hex.toString(16).padStart(6, '0');
             let barHtml = '';
             if (GAME_SETTINGS.showName) {
@@ -1997,6 +2176,7 @@ function updateHUDOverlay() {
             }
             if (barHtml === '') barEl.style.display = 'none';
             else barEl.innerHTML = barHtml;
+            }
         }
     }
     document.querySelectorAll('[id^="hp-bar-"]').forEach(el => { if (!players[el.id.replace('hp-bar-','')]) el.remove(); });
