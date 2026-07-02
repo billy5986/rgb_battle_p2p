@@ -1103,8 +1103,6 @@ function handleNetworkData(senderPeerId, data) {
             if (pData.id !== myPeerId) {
                 let p = players[pData.id];
                 if (!p) p = spawnRemotePlayer(pData.id, pData.name);
-                p.mesh.position.set(pData.x, pData.y, pData.z);
-                p.mesh.rotation.y = pData.ry;
                 p.bodyColorIndex = pData.bodyColor;
                 p.lightColorIndex = pData.lightColor;
                 p.isLightOn = pData.isLightOn;
@@ -1112,7 +1110,8 @@ function handleNetworkData(senderPeerId, data) {
                 p.pitch = pData.pitch || 0;
                 p.hp = pData.hp; p.kills = pData.kills; p.deaths = pData.deaths;
                 p.capsuleMesh.material.color.setHex(COLORS[pData.bodyColor].hex);
-                updateRemoteLightCone(p);
+                p.targetPos = new THREE.Vector3(pData.x, pData.y, pData.z);
+                p.targetRy = pData.ry;
             }
         });
     }
@@ -1120,8 +1119,6 @@ function handleNetworkData(senderPeerId, data) {
     else if (data.type === 'player_update') {
         let p = players[data.id];
         if (!p) p = spawnRemotePlayer(data.id, data.name);
-        p.mesh.position.set(data.x, data.y, data.z);
-        p.mesh.rotation.y = data.ry;
         p.bodyColorIndex = data.bodyColor;
         p.lightColorIndex = data.lightColor;
         p.isLightOn = data.isLightOn;
@@ -1129,7 +1126,8 @@ function handleNetworkData(senderPeerId, data) {
         p.pitch = data.pitch || 0;
         p.hp = data.hp; p.kills = data.kills; p.deaths = data.deaths;
         p.capsuleMesh.material.color.setHex(COLORS[data.bodyColor].hex);
-        updateRemoteLightCone(p);
+        p.targetPos = new THREE.Vector3(data.x, data.y, data.z);
+        p.targetRy = data.ry;
     }
     // 修正：Host 中繼轉發傷害判定
     else if (data.type === 'trigger_damage') {
@@ -1513,6 +1511,20 @@ function animate() {
     if (!isPaused) {
         updateLocalPlayerPhysics(dt);
         if (!isMultiplayer) updateBotsAI(dt); 
+        
+        for (let key in players) {
+            if (key === myPeerId || key === 'local') continue;
+            const p = players[key];
+            if (p.targetPos) {
+                p.mesh.position.lerp(p.targetPos, 0.3);
+                let diff = p.targetRy - p.mesh.rotation.y;
+                while (diff < -Math.PI) diff += Math.PI * 2;
+                while (diff > Math.PI) diff -= Math.PI * 2;
+                p.mesh.rotation.y += diff * 0.3;
+            }
+            updateRemoteLightCone(p);
+        }
+        
         updateLightBeamMechanics(dt);
         updateParticles(dt);
     }
@@ -1939,7 +1951,10 @@ function updateCameraFollow() {
 function updateHUDOverlay() {
     const listEl = document.getElementById('leaderboard-list'); let rankList = [];
     for (let key in players) rankList.push({ name: players[key].name || (key === myPeerId ? localPlayerName : '連線玩家'), kills: players[key].kills, deaths: players[key].deaths, isMe: key === myPeerId, colorHex: COLORS[players[key].bodyColorIndex].hex });
-    rankList.sort((a, b) => b.kills - a.kills);
+    rankList.sort((a, b) => {
+        if (b.kills !== a.kills) return b.kills - a.kills;
+        return a.name.localeCompare(b.name);
+    });
 
     let html = '';
     rankList.forEach((e, idx) => {
